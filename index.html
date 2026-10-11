@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- html2canvas pour la capture d'écran -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         .gradient-header {
             background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
@@ -20,8 +22,9 @@
             background: linear-gradient(135deg, #fef3c7 0%, #fbcfe8 50%, #bae6fd 100%);
             border-top: 5px solid #ec4899;
         }
-        /* Classe pour masquer les cotes des joueurs dans les équipes via le bouton */
-        body.hide-ratings .team-player-rating {
+        /* Masquer les cotes avec le bouton dédié */
+        body.hide-ratings .team-player-rating,
+        body.hide-ratings .team-average-badge {
             display: none !important;
         }
     </style>
@@ -125,8 +128,8 @@
                 </div>
             </div>
 
-            <!-- Affichage des 2 Équipes -->
-            <div class="grid md:grid-cols-2 gap-6">
+            <!-- Conteneur global des 2 Équipes pour la capture photo -->
+            <div id="teams-capture-container" class="grid md:grid-cols-2 gap-6 bg-slate-100 p-2 rounded-2xl">
 
                 <!-- ÉQUIPE BLANC -->
                 <div class="team-blanc rounded-2xl shadow-md p-6 border border-slate-300">
@@ -135,7 +138,7 @@
                             <span class="w-4 h-4 rounded-full bg-white border border-slate-400 inline-block shadow-sm"></span>
                             <h3 class="text-xl font-extrabold text-slate-800">ÉQUIPE BLANC</h3>
                         </div>
-                        <div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-slate-200 text-xs font-bold text-slate-700">
+                        <div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-slate-200 text-xs font-bold text-slate-700 team-average-badge">
                             Cote moy.: <span id="cote-moy-blanc" class="text-cyan-700">0.0</span> / 10
                         </div>
                     </div>
@@ -178,7 +181,7 @@
                             <span class="w-4 h-4 rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 inline-block shadow-sm"></span>
                             <h3 class="text-xl font-extrabold text-slate-800">ÉQUIPE MULTICOLORE</h3>
                         </div>
-                        <div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-pink-200 text-xs font-bold text-slate-700">
+                        <div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-pink-200 text-xs font-bold text-slate-700 team-average-badge">
                             Cote moy.: <span id="cote-moy-multicolore" class="text-pink-600">0.0</span> / 10
                         </div>
                     </div>
@@ -216,10 +219,13 @@
 
             </div>
 
-            <!-- Bouton Export Texte SMS / Messenger -->
-            <div class="flex justify-end">
+            <!-- Boutons Export (SMS & Photo Facebook) -->
+            <div class="flex flex-wrap justify-end gap-3">
                 <button onclick="copyLineupText()" class="px-5 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold shadow flex items-center gap-2">
                     <i class="fa-regular fa-copy"></i> Copier l'alignement pour SMS / Messenger
+                </button>
+                <button onclick="takeTeamsSnapshot()" class="px-5 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl font-semibold shadow flex items-center gap-2 transition-all">
+                    <i class="fa-solid fa-camera"></i> Prendre en photo (Snapshot Facebook)
                 </button>
             </div>
         </section>
@@ -816,6 +822,45 @@
             }
         }
 
+        // --- FONCTION DE CAPTURE PHOTO (SNAPSHOT) POUR FACEBOOK ---
+        function takeTeamsSnapshot() {
+            const container = document.getElementById('teams-capture-container');
+            
+            // Notification visuelle de chargement
+            const btn = event.currentTarget;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Génération de l'image...`;
+            btn.disabled = true;
+
+            html2canvas(container, {
+                scale: 2, // Haute qualité
+                useCORS: true,
+                backgroundColor: '#f1f5f9'
+            }).then(canvas => {
+                canvas.toBlob(blob => {
+                    const item = new ClipboardItem({ "image/png": blob });
+                    navigator.clipboard.write([item]).then(() => {
+                        alert("📸 Photo des alignements copiée dans le presse-papier ! Vous pouvez la coller (Ctrl+V ou Cmd+V) directement dans votre publication Facebook.");
+                    }).catch(() => {
+                        // Si le presse-papier image n'est pas supporté par le navigateur, on télécharge l'image directement
+                        const link = document.createElement('a');
+                        link.download = `alignement-hockey-${new Date().toISOString().split('T')[0]}.png`;
+                        link.href = canvas.toDataURL();
+                        link.click();
+                        alert("📸 Image téléchargée sur votre appareil ! Vous pouvez l'ajouter à votre publication Facebook.");
+                    });
+                    
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                });
+            }).catch(err => {
+                console.error("Erreur capture image:", err);
+                alert("Erreur lors de la génération de l'image.");
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            });
+        }
+
         // --- AUTHENTIFICATION & UTILISATEURS ---
         function getUserRole(username) {
             const u = users.find(x => x.username === username);
@@ -1353,7 +1398,7 @@
                     const btnDirection = currentTeamName === 'blanc' ? 'fa-arrow-right' : 'fa-arrow-left';
                     const btnTitle = currentTeamName === 'blanc' ? 'Transférer vers Multicolore' : 'Transférer vers Blanc';
 
-                    // Les cotes des joueurs dans les équipes ne s'affichent que si l'utilisateur est connecté
+                    // Cotes visibles uniquement si un utilisateur est connecté
                     const ratingHtml = currentUser ? `<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[11px] team-player-rating">${p.cote}/10</span>` : '';
 
                     item.innerHTML = `
@@ -1865,7 +1910,7 @@
             openSubGameModalFromPlayer, closeSubGameModal, saveSubGame,
             markSubGamePaid, deleteSubGame, togglePresence, openAddUserModal,
             openEditUserModal, closeUserModal, saveUser, changeUserRole, deleteUser,
-            toggleHideRatings
+            toggleHideRatings, takeTeamsSnapshot
         });
     </script>
 </body>
