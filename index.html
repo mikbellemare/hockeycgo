@@ -22,14 +22,14 @@
             background: linear-gradient(135deg, #fef3c7 0%, #fbcfe8 50%, #bae6fd 100%);
             border-top: 5px solid #ec4899;
         }
-        /* Masquer les cotes avec le bouton dédié */
+        /* Masquer les cotes en mode lecture seule ou via le bouton */
         body.hide-ratings .team-player-rating,
         body.hide-ratings .team-average-badge {
             display: none !important;
         }
     </style>
 </head>
-<body class="bg-slate-100 text-slate-800 font-sans min-h-screen pb-12">
+<body class="hide-ratings bg-slate-100 text-slate-800 font-sans min-h-screen pb-12">
 
     <!-- En-tête -->
     <header class="gradient-header text-white shadow-lg mb-6">
@@ -92,7 +92,7 @@
                     </div>
 
                     <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                        <button onclick="toggleHideRatings()" id="btn-toggle-ratings" class="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 transition-all">
+                        <button onclick="toggleHideRatings()" id="btn-toggle-ratings" class="hidden px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 transition-all">
                             <i class="fa-solid fa-eye-slash mr-1"></i> <span id="btn-ratings-text">Cacher les cotes</span>
                         </button>
                         <button onclick="checkOnlyRegulars()" class="admin-only px-3 py-1.5 text-xs font-bold bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg border border-cyan-200">
@@ -332,7 +332,7 @@
                 <div class="bg-indigo-50 p-5 rounded-2xl border border-indigo-200 shadow-sm">
                     <span class="block text-xs font-bold uppercase text-indigo-600 mb-1">Réguliers en règle</span>
                     <div class="text-2xl font-black text-indigo-700"><span id="count-paye">0</span> / <span id="count-total-reg">0</span></div>
-                    <p class="text-xs text-indigo-600/80 mt-1"><span id="count-sub-games">0</span> partie(s) jouée(s) par subs</p>
+                    <p class="text-xs text-indigo-600/80 mt-1"><span id="count-sub-games">0</span> partie(s) payante(s) par subs</p>
                 </div>
             </div>
 
@@ -369,7 +369,7 @@
                         <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
                             <i class="fa-solid fa-user-clock text-amber-600"></i> Suivi Partie par Partie des Remplaçants (Subs)
                         </h2>
-                        <p class="text-xs text-slate-500">Ajoutez les parties jouées par les remplaçants et suivez leurs paiements (25 $/partie).</p>
+                        <p class="text-xs text-slate-500">Ajoutez les parties jouées par les remplaçants (option partie gratuite disponible).</p>
                     </div>
                     <button onclick="openSubGameModal()" class="admin-only px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow text-xs flex items-center gap-2">
                         <i class="fa-solid fa-plus-circle"></i> Enregistrer une partie jouée
@@ -631,6 +631,14 @@
                     </div>
                 </div>
 
+                <!-- Option Partie Gratuite / Ignorer paiement -->
+                <div class="flex items-center gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                    <input type="checkbox" id="sub-game-free" onchange="toggleSubGameFree(this.checked)" class="w-4 h-4 text-amber-600 rounded focus:ring-amber-500">
+                    <label for="sub-game-free" class="text-xs font-bold text-amber-900 cursor-pointer">
+                        Partie gratuite (Ignorer pour les finances / Gardien remplaçant)
+                    </label>
+                </div>
+
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Statut Paiement</label>
@@ -723,8 +731,8 @@
                 date: "", 
                 method: "Non spécifié",
                 subGames: [
-                    { id: 101, date: "2026-09-15", amount: 25, status: "PAYE", method: "Interac / Virement" },
-                    { id: 102, date: "2026-09-22", amount: 25, status: "NON_PAYE", method: "Non spécifié" }
+                    { id: 101, date: "2026-09-15", amount: 25, status: "PAYE", method: "Interac / Virement", isFree: false },
+                    { id: 102, date: "2026-09-22", amount: 25, status: "NON_PAYE", method: "Non spécifié", isFree: false }
                 ]
             }
         ];
@@ -736,7 +744,6 @@
         let subRate = 25;
         let selectedPresenceIds = new Set();
         let currentLineup = { blanc: [], multicolore: [] };
-        let hideRatingsActive = false;
 
         // Synchronisation Firebase (Firestore)
         const leagueDocRef = doc(db, "ligue", "data");
@@ -805,18 +812,28 @@
             initFirebaseSync();
         });
 
-        // --- OPTION CACHER LES COTES POUR SCREENSHOT ---
+        // --- VISIBILITÉ STRICTE DES COTES (Cachées par défaut en lecture seule) ---
+        function updateRatingsVisibility() {
+            if (currentUser) {
+                document.body.classList.remove('hide-ratings');
+                document.getElementById('btn-toggle-ratings').classList.remove('hidden');
+            } else {
+                document.body.classList.add('hide-ratings');
+                document.getElementById('btn-toggle-ratings').classList.add('hidden');
+            }
+        }
+
         function toggleHideRatings() {
-            hideRatingsActive = !hideRatingsActive;
+            if(!currentUser) return;
+            document.body.classList.toggle('hide-ratings');
+            const isHidden = document.body.classList.contains('hide-ratings');
             const btnText = document.getElementById('btn-ratings-text');
             const btn = document.getElementById('btn-toggle-ratings');
 
-            if (hideRatingsActive) {
-                document.body.classList.add('hide-ratings');
+            if (isHidden) {
                 btnText.innerText = "Afficher les cotes";
                 btn.className = "px-3 py-1.5 text-xs font-bold bg-cyan-600 text-white rounded-lg border border-cyan-700 transition-all shadow-sm";
             } else {
-                document.body.classList.remove('hide-ratings');
                 btnText.innerText = "Cacher les cotes";
                 btn.className = "px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 transition-all";
             }
@@ -825,15 +842,13 @@
         // --- FONCTION DE CAPTURE PHOTO (SNAPSHOT) POUR FACEBOOK ---
         function takeTeamsSnapshot() {
             const container = document.getElementById('teams-capture-container');
-            
-            // Notification visuelle de chargement
             const btn = event.currentTarget;
             const originalHTML = btn.innerHTML;
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Génération de l'image...`;
             btn.disabled = true;
 
             html2canvas(container, {
-                scale: 2, // Haute qualité
+                scale: 2,
                 useCORS: true,
                 backgroundColor: '#f1f5f9'
             }).then(canvas => {
@@ -842,7 +857,6 @@
                     navigator.clipboard.write([item]).then(() => {
                         alert("📸 Photo des alignements copiée dans le presse-papier ! Vous pouvez la coller (Ctrl+V ou Cmd+V) directement dans votre publication Facebook.");
                     }).catch(() => {
-                        // Si le presse-papier image n'est pas supporté par le navigateur, on télécharge l'image directement
                         const link = document.createElement('a');
                         link.download = `alignement-hockey-${new Date().toISOString().split('T')[0]}.png`;
                         link.href = canvas.toDataURL();
@@ -983,8 +997,9 @@
             document.getElementById('season-cost-input').disabled = !isAdmin;
             document.getElementById('sub-cost-input').disabled = !currentUser;
 
+            updateRatingsVisibility();
             renderPlayersTable();
-            renderTeams(); // Met à jour l'affichage des cotes selon la connexion
+            renderTeams();
         }
 
         // --- GESTION DES UTILISATEURS (ADMIN) ---
@@ -1295,7 +1310,7 @@
                             <div class="font-semibold text-slate-800 truncate">${p.name}</div>
                             <div class="flex items-center gap-1 mt-0.5">
                                 <span class="px-1.5 py-0.2 text-[10px] font-bold rounded ${cat.badgeColor}">${p.position.substring(0,3)}</span>
-                                <span class="text-[10px] text-slate-500 font-bold ${currentUser ? '' : 'hidden'}">${p.cote}/10</span>
+                                <span class="text-[10px] text-slate-500 font-bold team-player-rating">${p.cote}/10</span>
                                 ${p.type === 'REMPLACANT' ? '<span class="text-[9px] text-amber-600 font-bold">(Sub)</span>' : ''}
                             </div>
                         </div>
@@ -1398,15 +1413,12 @@
                     const btnDirection = currentTeamName === 'blanc' ? 'fa-arrow-right' : 'fa-arrow-left';
                     const btnTitle = currentTeamName === 'blanc' ? 'Transférer vers Multicolore' : 'Transférer vers Blanc';
 
-                    // Cotes visibles uniquement si un utilisateur est connecté
-                    const ratingHtml = currentUser ? `<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[11px] team-player-rating">${p.cote}/10</span>` : '';
-
                     item.innerHTML = `
                         <div class="flex items-center gap-2">
                             <span class="font-semibold text-slate-700">${p.name} ${p.type === 'REMPLACANT' ? '<span class="text-[10px] text-amber-600 font-bold">(Sub)</span>' : ''}</span>
                         </div>
                         <div class="flex items-center gap-2">
-                            ${ratingHtml}
+                            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[11px] team-player-rating">${p.cote}/10</span>
                             ${currentUser ? `
                                 <button onclick="movePlayer(${p.id}, '${currentTeamName}', '${targetTeamName}')" title="${btnTitle}" class="px-2 py-1 bg-slate-100 hover:bg-cyan-600 hover:text-white text-slate-600 rounded text-[11px] font-bold transition-all flex items-center gap-1">
                                     <i class="fa-solid ${btnDirection}"></i>
@@ -1483,12 +1495,14 @@
                     else if(isPartial) statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">Partiel (${p.paid}$ / ${seasonCost}$)</span>`;
                     else statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">Non payé</span>`;
                 } else {
-                    const games = p.subGames || [];
+                    const games = (p.subGames || []).filter(g => !g.isFree);
                     const unpaidGames = games.filter(g => g.status !== 'PAYE').length;
-                    if (games.length === 0) {
+                    const freeCount = (p.subGames || []).filter(g => g.isFree).length;
+
+                    if ((p.subGames || []).length === 0) {
                         statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">0 partie</span>`;
                     } else if (unpaidGames === 0) {
-                        statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">${games.length} partie(s) - À jour</span>`;
+                        statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">${(p.subGames || []).length} partie(s) ${freeCount > <span>(' + freeCount + ' gratuites)</span> : ''} - À jour</span>`;
                     } else {
                         statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">${unpaidGames} impayée(s)</span>`;
                     }
@@ -1508,7 +1522,7 @@
                         </span>
                     </td>
                     <td class="p-3">${p.position}</td>
-                    <td class="p-3 font-bold text-slate-700">${currentUser ? p.cote + '/10' : '-'}</td>
+                    <td class="p-3 font-bold text-slate-700 team-player-rating">${p.cote}/10</td>
                     <td class="p-3 text-slate-500">${p.phone || '-'}</td>
                     ${isAdmin ? `<td class="p-3 payment-status-col">${statusBadge}</td>` : ''}
                     <td class="p-3 text-right space-x-1">${actionsHtml}</td>
@@ -1567,8 +1581,10 @@
 
             subs.forEach(sub => {
                 const games = sub.subGames || [];
-                const totalDue = games.reduce((acc, g) => acc + g.amount, 0);
-                const totalPaid = games.filter(g => g.status === 'PAYE').reduce((acc, g) => acc + g.amount, 0);
+                // Calculs en ignorant les parties gratuites (isFree = true)
+                const paidOrUnpaidGames = games.filter(g => !g.isFree);
+                const totalDue = paidOrUnpaidGames.reduce((acc, g) => acc + g.amount, 0);
+                const totalPaid = paidOrUnpaidGames.filter(g => g.status === 'PAYE').reduce((acc, g) => acc + g.amount, 0);
                 const unpaid = totalDue - totalPaid;
 
                 const tr = document.createElement('tr');
@@ -1577,22 +1593,23 @@
                 let gamesDetail = '';
                 if (games.length > 0) {
                     gamesDetail = games.map(g => {
-                        let payAction = '';
-                        if (g.status === 'PAYE') {
-                            payAction = `<span class="text-emerald-700 font-bold" title="${g.method}">✓ Payé</span>`;
+                        let badgeHtml = '';
+                        if (g.isFree) {
+                            badgeHtml = `<span class="text-indigo-600 font-bold bg-indigo-50 px-1 rounded">Gratuite (0$)</span>`;
+                        } else if (g.status === 'PAYE') {
+                            badgeHtml = `<span class="text-emerald-700 font-bold">✓ Payé (${g.amount}$)</span>`;
                         } else {
-                            payAction = currentUser 
-                                ? `<button onclick="markSubGamePaid(${sub.id}, ${g.id})" class="text-xs text-rose-600 font-bold underline hover:text-emerald-600">Régler</button>` 
-                                : `<span class="text-xs text-rose-600 font-bold">Non payé</span>`;
+                            badgeHtml = currentUser ? 
+                                `<button onclick="markSubGamePaid(${sub.id}, ${g.id})" class="text-xs text-rose-600 font-bold underline hover:text-emerald-600">Régler (${g.amount}$)</button>` : 
+                                `<span class="text-xs text-rose-600 font-bold">Non payé (${g.amount}$)</span>`;
                         }
 
-                        let deleteBtn = currentUser ? `<button onclick="deleteSubGame(${sub.id}, ${g.id})" class="text-slate-400 hover:text-rose-600 ml-1" title="Supprimer la partie"><i class="fa-solid fa-xmark"></i></button>` : '';
+                        let deleteBtn = currentUser ? `<button onclick="deleteSubGame(${sub.id}, ${g.id})" class="text-slate-400 hover:text-rose-600 ml-1" title="Supprimer"><i class="fa-solid fa-xmark"></i></button>` : '';
 
                         return `
                             <div class="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[11px] mr-1 mb-1">
                                 <span>${g.date}</span>
-                                <span class="font-bold">${g.amount}$</span>
-                                ${payAction}
+                                ${badgeHtml}
                                 ${deleteBtn}
                             </div>
                         `;
@@ -1625,13 +1642,13 @@
 
             const totalPercuReg = reguliers.reduce((acc, p) => acc + (p.paid || 0), 0);
             
-            let totalSubGamesCount = 0;
+            let totalPayableSubGamesCount = 0;
             let totalPercuSubs = 0;
             let totalImpayeSubs = 0;
 
             subs.forEach(s => {
-                const games = s.subGames || [];
-                totalSubGamesCount += games.length;
+                const games = (s.subGames || []).filter(g => !g.isFree);
+                totalPayableSubGamesCount += games.length;
                 games.forEach(g => {
                     if (g.status === 'PAYE') totalPercuSubs += g.amount;
                     else totalImpayeSubs += g.amount;
@@ -1664,7 +1681,7 @@
             if(elCountReg) elCountReg.innerText = reguliers.length;
 
             const elSubGames = document.getElementById('count-sub-games');
-            if(elSubGames) elSubGames.innerText = totalSubGamesCount;
+            if(elSubGames) elSubGames.innerText = totalPayableSubGamesCount;
         }
 
         // --- JOUEURS MODAL (AJOUT / MODIFICATION / SUPPRESSION) ---
@@ -1732,7 +1749,7 @@
                     const div = document.createElement('div');
                     div.className = "flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200";
                     div.innerHTML = `
-                        <span>${g.date} - <b>${g.amount}$</b> (${g.status === 'PAYE' ? 'Payé' : 'Non payé'})</span>
+                        <span>${g.date} - <b>${g.isFree ? 'Gratuite (0$)' : g.amount + '$'}</b> (${g.isFree ? 'Ignorée' : (g.status === 'PAYE' ? 'Payé' : 'Non payé')})</span>
                         <button type="button" onclick="deleteSubGame(${player.id}, ${g.id})" class="text-rose-600 font-bold hover:underline">Supprimer</button>
                     `;
                     container.appendChild(div);
@@ -1821,11 +1838,25 @@
             });
         }
 
+        function toggleSubGameFree(isFree) {
+            const amountInput = document.getElementById('sub-game-amount');
+            if (isFree) {
+                amountInput.dataset.prev = amountInput.value;
+                amountInput.value = 0;
+                amountInput.disabled = true;
+            } else {
+                amountInput.value = amountInput.dataset.prev || subRate;
+                amountInput.disabled = false;
+            }
+        }
+
         function openSubGameModal() {
             if(!currentUser) return;
             populateSubDropdown();
             document.getElementById('sub-game-form').reset();
             document.getElementById('sub-game-amount').value = subRate;
+            document.getElementById('sub-game-amount').disabled = false;
+            document.getElementById('sub-game-free').checked = false;
             document.getElementById('sub-game-date').value = new Date().toISOString().split('T')[0];
             document.getElementById('sub-game-modal').classList.remove('hidden');
         }
@@ -1853,9 +1884,10 @@
 
             const subId = parseInt(document.getElementById('sub-game-player-id').value);
             const date = document.getElementById('sub-game-date').value;
-            const amount = parseFloat(document.getElementById('sub-game-amount').value) || 25;
-            const status = document.getElementById('sub-game-status').value;
-            const method = document.getElementById('sub-game-method').value;
+            const isFree = document.getElementById('sub-game-free').checked;
+            const amount = isFree ? 0 : (parseFloat(document.getElementById('sub-game-amount').value) || 25);
+            const status = isFree ? 'PAYE' : document.getElementById('sub-game-status').value;
+            const method = isFree ? 'Gratuit / Ignoré' : document.getElementById('sub-game-method').value;
 
             const player = players.find(p => p.id === subId);
             if (player) {
@@ -1865,7 +1897,8 @@
                     date,
                     amount,
                     status,
-                    method
+                    method,
+                    isFree
                 });
 
                 saveStorage();
@@ -1910,7 +1943,7 @@
             openSubGameModalFromPlayer, closeSubGameModal, saveSubGame,
             markSubGamePaid, deleteSubGame, togglePresence, openAddUserModal,
             openEditUserModal, closeUserModal, saveUser, changeUserRole, deleteUser,
-            toggleHideRatings, takeTeamsSnapshot
+            toggleHideRatings, takeTeamsSnapshot, toggleSubGameFree
         });
     </script>
 </body>
