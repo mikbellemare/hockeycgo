@@ -20,6 +20,10 @@
             background: linear-gradient(135deg, #fef3c7 0%, #fbcfe8 50%, #bae6fd 100%);
             border-top: 5px solid #ec4899;
         }
+        /* Classe pour masquer les cotes */
+        body.hide-ratings .hide-on-screenshot {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen pb-12">
@@ -85,6 +89,9 @@
                     </div>
 
                     <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                        <button onclick="toggleHideRatings()" id="btn-toggle-ratings" class="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 transition-all">
+                            <i class="fa-solid fa-eye-slash mr-1"></i> <span id="btn-ratings-text">Cacher les cotes</span>
+                        </button>
                         <button onclick="checkOnlyRegulars()" class="admin-only px-3 py-1.5 text-xs font-bold bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg border border-cyan-200">
                             <i class="fa-solid fa-user-check mr-1"></i> Réguliers seulement
                         </button>
@@ -128,7 +135,7 @@
                             <span class="w-4 h-4 rounded-full bg-white border border-slate-400 inline-block shadow-sm"></span>
                             <h3 class="text-xl font-extrabold text-slate-800">ÉQUIPE BLANC</h3>
                         </div>
-                        <div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-slate-200 text-xs font-bold text-slate-700">
+                        <div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-slate-200 text-xs font-bold text-slate-700 hide-on-screenshot">
                             Cote moy.: <span id="cote-moy-blanc" class="text-cyan-700">0.0</span> / 10
                         </div>
                     </div>
@@ -171,7 +178,7 @@
                             <span class="w-4 h-4 rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 inline-block shadow-sm"></span>
                             <h3 class="text-xl font-extrabold text-slate-800">ÉQUIPE MULTICOLORE</h3>
                         </div>
-                        <div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-pink-200 text-xs font-bold text-slate-700">
+                        <div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full border border-pink-200 text-xs font-bold text-slate-700 hide-on-screenshot">
                             Cote moy.: <span id="cote-moy-multicolore" class="text-pink-600">0.0</span> / 10
                         </div>
                     </div>
@@ -723,6 +730,7 @@
         let subRate = 25;
         let selectedPresenceIds = new Set();
         let currentLineup = { blanc: [], multicolore: [] };
+        let hideRatingsActive = false;
 
         // Synchronisation Firebase (Firestore)
         const leagueDocRef = doc(db, "ligue", "data");
@@ -735,6 +743,11 @@
                     users = data.users || [...DEFAULT_USERS];
                     seasonCost = data.seasonCost !== undefined ? data.seasonCost : 592;
                     subRate = data.subRate !== undefined ? data.subRate : 25;
+                    
+                    // Récupérer l'alignement sauvegardé dans Firebase s'il existe
+                    if (data.currentLineup && data.currentLineup.blanc && data.currentLineup.multicolore) {
+                        currentLineup = data.currentLineup;
+                    }
                 } else {
                     players = [...OFFICIAL_24_PLAYERS];
                     users = [...DEFAULT_USERS];
@@ -758,7 +771,14 @@
                 renderSubFinanceTable();
                 renderUsersTable();
                 updateFinanceStats();
-                generateTeams();
+                
+                // Si l'alignement est vide (premier chargement), on en génère un
+                if (!currentLineup.blanc.length && !currentLineup.multicolore.length) {
+                    generateTeams();
+                } else {
+                    renderTeams();
+                }
+
                 applyPermissionUI();
             });
         }
@@ -769,8 +789,9 @@
                     players: players,
                     users: users,
                     seasonCost: seasonCost,
-                    subRate: subRate
-                });
+                    subRate: subRate,
+                    currentLineup: currentLineup
+                }, { merge: true });
             } catch (error) {
                 console.error("Erreur lors de la sauvegarde Firebase :", error);
             }
@@ -779,6 +800,23 @@
         window.addEventListener('DOMContentLoaded', () => {
             initFirebaseSync();
         });
+
+        // --- OPTION CACHER LES COTES POUR SCREENSHOT ---
+        function toggleHideRatings() {
+            hideRatingsActive = !hideRatingsActive;
+            const btnText = document.getElementById('btn-ratings-text');
+            const btn = document.getElementById('btn-toggle-ratings');
+
+            if (hideRatingsActive) {
+                document.body.classList.add('hide-ratings');
+                btnText.innerText = "Afficher les cotes";
+                btn.className = "px-3 py-1.5 text-xs font-bold bg-cyan-600 text-white rounded-lg border border-cyan-700 transition-all shadow-sm";
+            } else {
+                document.body.classList.remove('hide-ratings');
+                btnText.innerText = "Cacher les cotes";
+                btn.className = "px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 transition-all";
+            }
+        }
 
         // --- AUTHENTIFICATION & UTILISATEURS ---
         function getUserRole(username) {
@@ -1213,7 +1251,7 @@
                             <div class="font-semibold text-slate-800 truncate">${p.name}</div>
                             <div class="flex items-center gap-1 mt-0.5">
                                 <span class="px-1.5 py-0.2 text-[10px] font-bold rounded ${cat.badgeColor}">${p.position.substring(0,3)}</span>
-                                <span class="text-[10px] text-slate-500 font-bold">${p.cote}/10</span>
+                                <span class="text-[10px] text-slate-500 font-bold hide-on-screenshot">${p.cote}/10</span>
                                 ${p.type === 'REMPLACANT' ? '<span class="text-[9px] text-amber-600 font-bold">(Sub)</span>' : ''}
                             </div>
                         </div>
@@ -1274,6 +1312,7 @@
             distribute(attaquants);
 
             currentLineup = { blanc: teamBlanc, multicolore: teamMulticolore };
+            saveStorage(); // Sauvegarde directe dans Firebase
             renderTeams();
         }
 
@@ -1283,6 +1322,7 @@
             if (playerIndex !== -1) {
                 const [player] = currentLineup[fromTeam].splice(playerIndex, 1);
                 currentLineup[toTeam].push(player);
+                saveStorage(); // Sauvegarde directe dans Firebase lors du déplacement manuel
                 renderTeams();
             }
         }
@@ -1319,7 +1359,7 @@
                             <span class="font-semibold text-slate-700">${p.name} ${p.type === 'REMPLACANT' ? '<span class="text-[10px] text-amber-600 font-bold">(Sub)</span>' : ''}</span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[11px]">${p.cote}/10</span>
+                            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[11px] hide-on-screenshot">${p.cote}/10</span>
                             ${currentUser ? `
                                 <button onclick="movePlayer(${p.id}, '${currentTeamName}', '${targetTeamName}')" title="${btnTitle}" class="px-2 py-1 bg-slate-100 hover:bg-cyan-600 hover:text-white text-slate-600 rounded text-[11px] font-bold transition-all flex items-center gap-1">
                                     <i class="fa-solid ${btnDirection}"></i>
@@ -1831,7 +1871,8 @@
             updateSubCost, openSubGameModal, openSubGameModalForPlayer,
             openSubGameModalFromPlayer, closeSubGameModal, saveSubGame,
             markSubGamePaid, deleteSubGame, togglePresence, openAddUserModal,
-            openEditUserModal, closeUserModal, saveUser, changeUserRole, deleteUser
+            openEditUserModal, closeUserModal, saveUser, changeUserRole, deleteUser,
+            toggleHideRatings
         });
     </script>
 </body>
