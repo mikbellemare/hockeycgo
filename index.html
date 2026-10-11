@@ -449,12 +449,12 @@
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Nom d'utilisateur ou E-mail</label>
-                    <input type="text" id="login-email" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="mbellemare">
+                    <input type="text" id="login-email" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="mbellemare">
                 </div>
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Mot de passe</label>
-                    <input type="password" id="login-password" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                    <input type="password" id="login-password" autocomplete="current-password" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -480,7 +480,7 @@
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Identifiant / E-mail</label>
-                    <input type="text" id="user-email" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="mbellemare ou email@domaine.com">
+                    <input type="text" id="user-email" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="mbellemare ou email@domaine.com">
                 </div>
 
                 <div>
@@ -875,7 +875,6 @@
             e.preventDefault();
             let loginVal = document.getElementById('login-email').value.trim();
             
-            // Complétion automatique si l'utilisateur entre juste son nom
             if (!loginVal.includes('@')) {
                 loginVal += '@hockeycgo.workers.dev';
             }
@@ -1321,7 +1320,6 @@
                     <button onclick="deletePlayer(${p.id})" class="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded"><i class="fa-solid fa-trash"></i></button>
                 ` : `<span class="text-xs text-slate-400 italic">Lecture seule</span>`;
 
-                // Masquer le numéro de téléphone si non connecté
                 const phoneDisplay = currentUser ? (p.phone || '-') : '<span class="text-slate-400 italic">Connectez-vous</span>';
 
                 tr.innerHTML = `
