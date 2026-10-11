@@ -444,7 +444,7 @@
 
             <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
                 <div id="login-error" class="hidden p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold">
-                    Identifiants invalides.
+                    Identifiants invalides ou utilisateur non autorisé.
                 </div>
 
                 <div>
@@ -476,11 +476,9 @@
             </div>
 
             <form id="user-form" onsubmit="saveUser(event)" class="space-y-4">
-                <input type="hidden" id="user-original-email">
-
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Identifiant / E-mail</label>
-                    <input type="text" id="user-email" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="mbellemare ou email@domaine.com">
+                    <input type="text" id="user-email" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="nomutilisateur ou email@hockeycgo.local">
                 </div>
 
                 <div>
@@ -719,7 +717,6 @@
             }
         ];
 
-        let users = [];
         let currentUser = null; 
         let userRoleMap = {}; 
         let players = [];
@@ -770,6 +767,9 @@
                 } else {
                     renderTeams();
                 }
+                
+                // Mettre à jour l'interface des permissions après chargement des rôles Firestore
+                applyPermissionUI();
             });
         }
 
@@ -858,6 +858,8 @@
 
         function getCurrentUserRole() {
             if (!currentUser) return null;
+            // S'assure que le compte principal ou les utilisateurs enregistrés dans userRoles ont le bon rôle
+            if (currentUser.email === "mbellemare@hockeycgo.local") return 'ADMIN';
             return userRoleMap[currentUser.email] || 'Gestionnaire';
         }
 
@@ -883,11 +885,19 @@
 
             const pass = document.getElementById('login-password').value.trim();
 
+            // Vérification de sécurité locale avant authentification Firebase
+            if (loginVal !== "mbellemare@hockeycgo.local" && !userRoleMap[loginVal]) {
+                document.getElementById('login-error').innerText = "Cet utilisateur n'est pas autorisé dans le système.";
+                document.getElementById('login-error').classList.remove('hidden');
+                return;
+            }
+
             try {
                 await signInWithEmailAndPassword(auth, loginVal, pass);
                 closeLoginModal();
             } catch (error) {
                 console.error(error);
+                document.getElementById('login-error').innerText = "Identifiants invalides ou mot de passe incorrect.";
                 document.getElementById('login-error').classList.remove('hidden');
             }
         }
@@ -964,7 +974,6 @@
         function openAddUserModal() {
             if(getCurrentUserRole() !== 'ADMIN') return;
             document.getElementById('user-form').reset();
-            document.getElementById('user-original-email').value = '';
             document.getElementById('user-modal-title').innerHTML = `<i class="fa-solid fa-user-plus text-cyan-600"></i> Ajouter un utilisateur autorisé`;
             document.getElementById('user-modal').classList.remove('hidden');
         }
@@ -985,16 +994,18 @@
 
             if (!email) return;
 
+            // Ajout/Mise à jour directe dans la map Firestore synchronisée
             userRoleMap[email] = role;
             saveStorage();
             closeUserModal();
             renderUsersTable();
+            alert(`L'utilisateur ${email} a été ajouté avec succès dans la base de données.`);
         }
 
         function deleteUserEmail(email) {
             if(getCurrentUserRole() !== 'ADMIN') return;
-            if(email === currentUser?.email) {
-                alert("Vous ne pouvez pas supprimer votre propre compte actif.");
+            if(email === currentUser?.email || email === 'mbellemare@hockeycgo.local') {
+                alert("Vous ne pouvez pas supprimer ce compte principal ou votre propre compte actif.");
                 return;
             }
             if(confirm(`Retirer les accès pour ${email} ?`)) {
