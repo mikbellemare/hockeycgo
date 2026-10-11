@@ -465,7 +465,7 @@
         </div>
     </div>
 
-    <!-- ================= MODAL D'AJOUT / ÉDITION D'UTILISATEUR ================= -->
+    <!-- ================= MODAL D'AJOUT D'UTILISATEUR ================= -->
     <div id="user-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
             <div class="flex justify-between items-center border-b border-slate-100 pb-3">
@@ -718,7 +718,7 @@
         ];
 
         let currentUser = null; 
-        let userRoleMap = {}; 
+        let userRoleMap = { "mbellemare@hockeycgo.local": "ADMIN" }; 
         let players = [];
         let seasonCost = 592;
         let subRate = 25;
@@ -731,7 +731,7 @@
             onSnapshot(leagueDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    players = data.players || [];
+                    players = data.players || [...OFFICIAL_24_PLAYERS];
                     userRoleMap = data.userRoles || { "mbellemare@hockeycgo.local": "ADMIN" };
                     seasonCost = data.seasonCost !== undefined ? data.seasonCost : 592;
                     subRate = data.subRate !== undefined ? data.subRate : 25;
@@ -768,8 +768,9 @@
                     renderTeams();
                 }
                 
-                // Mettre à jour l'interface des permissions après chargement des rôles Firestore
                 applyPermissionUI();
+            }, (error) => {
+                console.error("Erreur de synchronisation Firestore :", error);
             });
         }
 
@@ -782,8 +783,10 @@
                     subRate: subRate,
                     currentLineup: currentLineup
                 }, { merge: true });
+                console.log("Sauvegarde Firestore réussie.");
             } catch (error) {
-                console.error("Erreur lors de la sauvegarde Firebase :", error);
+                console.error("Erreur lors de la sauvegarde Firebase (Vérifiez vos règles Firestore) :", error);
+                alert("Erreur d'enregistrement dans Firestore. Vérifiez les règles de sécurité de votre base de données dans la console Firebase.");
             }
         }
 
@@ -858,7 +861,6 @@
 
         function getCurrentUserRole() {
             if (!currentUser) return null;
-            // S'assure que le compte principal ou les utilisateurs enregistrés dans userRoles ont le bon rôle
             if (currentUser.email === "mbellemare@hockeycgo.local") return 'ADMIN';
             return userRoleMap[currentUser.email] || 'Gestionnaire';
         }
@@ -885,7 +887,6 @@
 
             const pass = document.getElementById('login-password').value.trim();
 
-            // Vérification de sécurité locale avant authentification Firebase
             if (loginVal !== "mbellemare@hockeycgo.local" && !userRoleMap[loginVal]) {
                 document.getElementById('login-error').innerText = "Cet utilisateur n'est pas autorisé dans le système.";
                 document.getElementById('login-error').classList.remove('hidden');
@@ -994,7 +995,6 @@
 
             if (!email) return;
 
-            // Ajout/Mise à jour directe dans la map Firestore synchronisée
             userRoleMap[email] = role;
             saveStorage();
             closeUserModal();
