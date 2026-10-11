@@ -735,7 +735,7 @@
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     players = data.players || [];
-                    userRoleMap = data.userRoles || { "mbellemare@hockeycgo.workers.dev": "ADMIN" };
+                    userRoleMap = data.userRoles || { "mbellemare@hockeycgo.local": "ADMIN" };
                     seasonCost = data.seasonCost !== undefined ? data.seasonCost : 592;
                     subRate = data.subRate !== undefined ? data.subRate : 25;
                     
@@ -744,7 +744,7 @@
                     }
                 } else {
                     players = [...OFFICIAL_24_PLAYERS];
-                    userRoleMap = { "mbellemare@hockeycgo.workers.dev": "ADMIN" };
+                    userRoleMap = { "mbellemare@hockeycgo.local": "ADMIN" };
                     seasonCost = 592;
                     subRate = 25;
                     saveStorage();
@@ -875,8 +875,9 @@
             e.preventDefault();
             let loginVal = document.getElementById('login-email').value.trim();
             
+            // Complétion automatique avec @hockeycgo.local si aucun '@' n'est entré
             if (!loginVal.includes('@')) {
-                loginVal += '@hockeycgo.workers.dev';
+                loginVal += '@hockeycgo.local';
             }
 
             const pass = document.getElementById('login-password').value.trim();
@@ -973,8 +974,9 @@
             if(getCurrentUserRole() !== 'ADMIN') return;
 
             let email = document.getElementById('user-email').value.trim();
+            // Complétion automatique avec @hockeycgo.local si l'admin tape juste un nom d'utilisateur
             if (!email.includes('@')) {
-                email += '@hockeycgo.workers.dev';
+                email += '@hockeycgo.local';
             }
             const role = document.getElementById('user-role').value;
 
@@ -1017,7 +1019,7 @@
                     </select>
                 `;
 
-                let deleteBtn = (email === 'mbellemare@hockeycgo.workers.dev') 
+                let deleteBtn = (email === 'mbellemare@hockeycgo.local') 
                     ? `<span class="text-xs text-slate-400 italic">Principal</span>` 
                     : `<button onclick="deleteUserEmail('${email}')" class="p-1.5 text-rose-600 hover:text-rose-800 rounded"><i class="fa-solid fa-trash"></i></button>`;
 
