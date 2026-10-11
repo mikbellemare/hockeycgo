@@ -449,12 +449,12 @@
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Nom d'utilisateur ou E-mail</label>
-                    <input type="text" id="login-email" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="mbellemare">
+                    <input type="text" id="login-email" autocomplete="new-password" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="mbellemare">
                 </div>
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Mot de passe</label>
-                    <input type="password" id="login-password" autocomplete="current-password" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                    <input type="password" id="login-password" autocomplete="new-password" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -863,6 +863,9 @@
 
         function openLoginModal() {
             document.getElementById('login-form').reset();
+            // Force le champ à rester vide pour éviter le remplissage automatique du navigateur
+            document.getElementById('login-email').value = '';
+            document.getElementById('login-password').value = '';
             document.getElementById('login-error').classList.add('hidden');
             document.getElementById('login-modal').classList.remove('hidden');
         }
@@ -875,7 +878,6 @@
             e.preventDefault();
             let loginVal = document.getElementById('login-email').value.trim();
             
-            // Complétion automatique avec @hockeycgo.local si aucun '@' n'est entré
             if (!loginVal.includes('@')) {
                 loginVal += '@hockeycgo.local';
             }
@@ -928,6 +930,10 @@
                 if(tabAdmin) tabAdmin.classList.remove('hidden');
             } else {
                 if(tabAdmin) tabAdmin.classList.add('hidden');
+                // Si l'utilisateur n'est pas admin et qu'il est sur l'onglet admin, le ramener sur shuffle
+                if(!document.getElementById('section-admin').classList.contains('hidden')) {
+                    switchTab('shuffle');
+                }
             }
 
             const adminButtons = document.querySelectorAll('.admin-only');
@@ -974,7 +980,6 @@
             if(getCurrentUserRole() !== 'ADMIN') return;
 
             let email = document.getElementById('user-email').value.trim();
-            // Complétion automatique avec @hockeycgo.local si l'admin tape juste un nom d'utilisateur
             if (!email.includes('@')) {
                 email += '@hockeycgo.local';
             }
