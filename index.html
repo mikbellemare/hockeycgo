@@ -110,9 +110,9 @@
                     </div>
                 </div>
 
-                <!-- Sélection des présences optimisée (Compact Grid) -->
+                <!-- Sélection des présences avec format de cartes d'origine -->
                 <div class="mt-6 border-t border-slate-100 pt-4">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+                    <div class="flex justify-between items-center mb-4">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Présences pour la partie (<span id="count-present">0</span> sélectionnés)</span>
                         <div class="text-xs space-x-3">
                             <span class="inline-flex items-center gap-1 text-slate-600"><span class="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span> Gardiens: <b id="count-g">0</b></span>
@@ -122,7 +122,7 @@
                         </div>
                     </div>
 
-                    <div id="presence-categories-container" class="space-y-3 max-h-72 overflow-y-auto pr-1">
+                    <div id="presence-categories-container" class="space-y-4 max-h-96 overflow-y-auto pr-1">
                         <!-- Généré dynamiquement en JS -->
                     </div>
                 </div>
@@ -442,20 +442,20 @@
                 <button onclick="closeLoginModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
 
-            <!-- Ajout de autocomplete="off" / "new-password" pour bloquer la mémoire du navigateur -->
-            <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4" autocomplete="off">
+            <!-- autocomplete off pour bloquer l'affichage de suggestions -->
+            <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4" autocomplete="off" novalidate>
                 <div id="login-error" class="hidden p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold">
                     Identifiants invalides ou utilisateur non autorisé.
                 </div>
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Nom d'utilisateur ou E-mail</label>
-                    <input type="text" id="login-email" autocomplete="off" name="no_autofill_user" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="ex: mbellemare">
+                    <input type="text" id="login-email" autocomplete="off" name="random_user_field_xyz" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="ex: mbellemare">
                 </div>
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Mot de passe</label>
-                    <input type="password" id="login-password" autocomplete="new-password" name="no_autofill_pass" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                    <input type="password" id="login-password" autocomplete="new-password" name="random_pass_field_xyz" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -481,12 +481,12 @@
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Identifiant / E-mail</label>
-                    <input type="text" id="user-email-input" autocomplete="off" name="no_autofill_new_user" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="ex: eric (sera eric@hockeycgo.local)">
+                    <input type="text" id="user-email-input" autocomplete="off" name="random_new_user_field" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="ex: eric (sera eric@hockeycgo.local)">
                 </div>
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Mot de passe initial</label>
-                    <input type="password" id="user-password-input" autocomplete="new-password" name="no_autofill_new_pass" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Minimum 6 caractères">
+                    <input type="password" id="user-password-input" autocomplete="new-password" name="random_new_pass_field" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Minimum 6 caractères">
                 </div>
 
                 <div>
@@ -978,7 +978,7 @@
                 if(mbMsg) mbMsg.classList.add('hidden');
             } else {
                 if(regSection) regSection.classList.add('hidden');
-                if(summaryCards) regSection.classList.add('hidden'); // Fix style reference
+                if(summaryCards) summaryCards.classList.add('hidden');
                 if(mbMsg) mbMsg.classList.remove('hidden');
             }
 
@@ -1178,22 +1178,30 @@
                 cat.players.sort((a,b) => a.name.localeCompare(b.name));
 
                 const categoryBlock = document.createElement('div');
-                categoryBlock.className = "bg-slate-50 p-2.5 rounded-xl border border-slate-200";
+                categoryBlock.className = "bg-slate-50 p-3 rounded-xl border border-slate-200";
 
                 const categoryTitle = document.createElement('h3');
-                categoryTitle.className = `text-[11px] font-bold uppercase mb-1.5 flex items-center gap-2 ${cat.color}`;
+                categoryTitle.className = `text-xs font-bold uppercase mb-2 flex items-center gap-2 ${cat.color}`;
                 categoryTitle.innerHTML = `<i class="fa-solid ${cat.icon}"></i> ${cat.title} (${cat.players.length})`;
 
+                // Rétablissement des cartes de présence d'origine (Nom complet, position, cote)
                 const grid = document.createElement('div');
-                grid.className = "grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5";
+                grid.className = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2";
 
                 cat.players.forEach(p => {
                     const isChecked = selectedPresenceIds.has(p.id);
                     const card = document.createElement('label');
-                    card.className = `flex items-center gap-1.5 px-2 py-1 rounded-md ${currentUser ? 'cursor-pointer' : 'cursor-not-allowed'} transition-all border text-[11px] ${isChecked ? 'bg-white border-cyan-500 shadow-sm font-semibold' : 'bg-slate-100/70 border-transparent opacity-60'}`;
+                    card.className = `flex items-center gap-2 p-2 rounded-lg ${currentUser ? 'cursor-pointer' : 'cursor-not-allowed'} transition-all border ${isChecked ? 'bg-white border-cyan-500 shadow-sm' : 'bg-slate-100 border-transparent opacity-60'}`;
                     card.innerHTML = `
-                        <input type="checkbox" onchange="togglePresence(${p.id})" ${isChecked ? 'checked' : ''} ${currentUser ? '' : 'disabled'} class="w-3.5 h-3.5 text-cyan-600 rounded focus:ring-cyan-500 disabled:opacity-50">
-                        <span class="truncate" title="${p.name}">${p.name.split(' ')[0]} <span class="team-player-rating text-[9px] text-slate-400">(${p.cote})</span></span>
+                        <input type="checkbox" onchange="togglePresence(${p.id})" ${isChecked ? 'checked' : ''} ${currentUser ? '' : 'disabled'} class="w-4 h-4 text-cyan-600 rounded focus:ring-cyan-500 disabled:opacity-50">
+                        <div class="truncate text-xs">
+                            <div class="font-semibold text-slate-800 truncate">${p.name}</div>
+                            <div class="flex items-center gap-1 mt-0.5">
+                                <span class="px-1.5 py-0.2 text-[10px] font-bold rounded ${cat.badgeColor}">${p.position.substring(0,3)}</span>
+                                <span class="text-[10px] text-slate-500 font-bold team-player-rating">${p.cote}/10</span>
+                                ${p.type === 'REMPLACANT' ? '<span class="text-[9px] text-amber-600 font-bold">(Sub)</span>' : ''}
+                            </div>
+                        </div>
                     `;
                     grid.appendChild(card);
                 });
@@ -1628,7 +1636,7 @@
             if(!currentUser) return;
             if (confirm("Supprimer ce joueur ?")) {
                 players = players.filter(p => p.id !== id);
-                    selectedPresenceIds.delete(id);
+                selectedPresenceIds.delete(id);
                 saveStorage();
             }
         }
@@ -1705,10 +1713,8 @@
             const player = players.find(p => p.id === subId);
             if (player) {
                 if (!player.subGames) player.subGames = [];
-                player.subGames.path ? null : null; // safe check
                 player.subGames.push({ id: Date.now(), date, amount, status, method, isFree });
                 saveStorage();
-                closeUserModal ? null : null;
                 closeSubGameModal();
             }
         }
