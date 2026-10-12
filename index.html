@@ -480,7 +480,7 @@
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Identifiant / E-mail</label>
-                    <input type="text" id="user-email-input" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="ex: jean.dupont (sera jean.dupont@hockeycgo.local)">
+                    <input type="text" id="user-email-input" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="ex: eric (sera eric@hockeycgo.local)">
                 </div>
 
                 <div>
@@ -729,7 +729,11 @@
         ];
 
         let currentUser = null; 
-        let userRoleMap = { "mbellemare@hockeycgo.local": "ADMIN" }; 
+        // Seuls Eric et MBellemare par défaut
+        let userRoleMap = { 
+            "mbellemare@hockeycgo.local": "ADMIN",
+            "eric@hockeycgo.local": "ADMIN" 
+        }; 
         let players = [];
         let seasonCost = 592;
         let subRate = 25;
@@ -743,7 +747,25 @@
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     players = data.players || [...OFFICIAL_24_PLAYERS];
-                    userRoleMap = data.userRoles || { "mbellemare@hockeycgo.local": "ADMIN" };
+                    
+                    if (data.userRoles) {
+                        userRoleMap = data.userRoles;
+                        // Nettoyage automatique des anciens domaines .workers.dev s'il en reste
+                        Object.keys(userRoleMap).forEach(key => {
+                            if (key.includes('.workers.dev')) {
+                                delete userRoleMap[key];
+                            }
+                        });
+                        // Garantir les 2 principaux
+                        if (!userRoleMap["mbellemare@hockeycgo.local"]) userRoleMap["mbellemare@hockeycgo.local"] = "ADMIN";
+                        if (!userRoleMap["eric@hockeycgo.local"]) userRoleMap["eric@hockeycgo.local"] = "ADMIN";
+                    } else {
+                        userRoleMap = { 
+                            "mbellemare@hockeycgo.local": "ADMIN",
+                            "eric@hockeycgo.local": "ADMIN" 
+                        };
+                    }
+
                     seasonCost = data.seasonCost !== undefined ? data.seasonCost : 592;
                     subRate = data.subRate !== undefined ? data.subRate : 25;
                     
@@ -752,7 +774,10 @@
                     }
                 } else {
                     players = [...OFFICIAL_24_PLAYERS];
-                    userRoleMap = { "mbellemare@hockeycgo.local": "ADMIN" };
+                    userRoleMap = { 
+                        "mbellemare@hockeycgo.local": "ADMIN",
+                        "eric@hockeycgo.local": "ADMIN" 
+                    };
                     seasonCost = 592;
                     subRate = 25;
                     saveStorage();
@@ -793,7 +818,7 @@
                     seasonCost: seasonCost,
                     subRate: subRate,
                     currentLineup: currentLineup
-                }, { merge: true });
+                });
             } catch (error) {
                 console.error("Erreur lors de la sauvegarde Firebase :", error);
             }
@@ -1027,15 +1052,15 @@
             }
         }
 
-        function deleteUserEmail(email) {
+        async function deleteUserEmail(email) {
             if(getCurrentUserRole() !== 'ADMIN') return;
             if(email === currentUser?.email || email === 'mbellemare@hockeycgo.local') {
-                alert("Vous ne pouvez pas supprimer ce compte principal ou votre propre compte actif.");
+                alert("Vous ne pouvez pas supprimer le compte principal mbellemare@hockeycgo.local.");
                 return;
             }
-            if(confirm(`Retirer les accès pour ${email} ?`)) {
+            if(confirm(`Supprimer définitivement l'accès pour ${email} ?`)) {
                 delete userRoleMap[email];
-                saveStorage();
+                await saveStorage(); // Sauvegarde immédiate dans Firestore
                 renderUsersTable();
             }
         }
