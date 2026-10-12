@@ -110,9 +110,9 @@
                     </div>
                 </div>
 
-                <!-- Sélection des présences optimisée (Compact Grid) -->
+                <!-- Sélection des présences séparée par catégorie -->
                 <div class="mt-6 border-t border-slate-100 pt-4">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+                    <div class="flex justify-between items-center mb-4">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Présences pour la partie (<span id="count-present">0</span> sélectionnés)</span>
                         <div class="text-xs space-x-3">
                             <span class="inline-flex items-center gap-1 text-slate-600"><span class="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span> Gardiens: <b id="count-g">0</b></span>
@@ -122,7 +122,7 @@
                         </div>
                     </div>
 
-                    <div id="presence-categories-container" class="space-y-3 max-h-72 overflow-y-auto pr-1">
+                    <div id="presence-categories-container" class="space-y-4 max-h-96 overflow-y-auto pr-1">
                         <!-- Généré dynamiquement en JS -->
                     </div>
                 </div>
@@ -729,6 +729,7 @@
         ];
 
         let currentUser = null; 
+        // Aucun utilisateur par défaut en dur (chargé strictement depuis Firestore)
         let userRoleMap = {}; 
         let players = [];
         let seasonCost = 592;
@@ -745,6 +746,7 @@
                     players = data.players || [...OFFICIAL_24_PLAYERS];
                     userRoleMap = data.userRoles || {};
                     
+                    // S'assurer que le compte principal existe au minimum si vide
                     if (Object.keys(userRoleMap).length === 0) {
                         userRoleMap = { "mbellemare@hockeycgo.local": "ADMIN" };
                         saveStorage();
@@ -1036,6 +1038,7 @@
                 return;
             }
             if(confirm(`Supprimer l'accès pour ${email} ?`)) {
+                // Affichage immédiat d'un indicateur de suppression en attente sur la ligne
                 const tbody = document.getElementById('users-table-body');
                 const rows = tbody.querySelectorAll('tr');
                 rows.forEach(row => {
@@ -1177,23 +1180,29 @@
                 cat.players.sort((a,b) => a.name.localeCompare(b.name));
 
                 const categoryBlock = document.createElement('div');
-                categoryBlock.className = "bg-slate-50 p-2.5 rounded-xl border border-slate-200";
+                categoryBlock.className = "bg-slate-50 p-3 rounded-xl border border-slate-200";
 
                 const categoryTitle = document.createElement('h3');
-                categoryTitle.className = `text-[11px] font-bold uppercase mb-1.5 flex items-center gap-2 ${cat.color}`;
+                categoryTitle.className = `text-xs font-bold uppercase mb-2 flex items-center gap-2 ${cat.color}`;
                 categoryTitle.innerHTML = `<i class="fa-solid ${cat.icon}"></i> ${cat.title} (${cat.players.length})`;
 
-                // Grille ultra-compacte à colonnes multiples pour éviter de scroller verticalement
                 const grid = document.createElement('div');
-                grid.className = "grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5";
+                grid.className = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2";
 
                 cat.players.forEach(p => {
                     const isChecked = selectedPresenceIds.has(p.id);
                     const card = document.createElement('label');
-                    card.className = `flex items-center gap-1.5 px-2 py-1 rounded-md ${currentUser ? 'cursor-pointer' : 'cursor-not-allowed'} transition-all border text-[11px] ${isChecked ? 'bg-white border-cyan-500 shadow-sm font-semibold' : 'bg-slate-100/70 border-transparent opacity-60'}`;
+                    card.className = `flex items-center gap-2 p-2 rounded-lg ${currentUser ? 'cursor-pointer' : 'cursor-not-allowed'} transition-all border ${isChecked ? 'bg-white border-cyan-500 shadow-sm' : 'bg-slate-100 border-transparent opacity-60'}`;
                     card.innerHTML = `
-                        <input type="checkbox" onchange="togglePresence(${p.id})" ${isChecked ? 'checked' : ''} ${currentUser ? '' : 'disabled'} class="w-3.5 h-3.5 text-cyan-600 rounded focus:ring-cyan-500 disabled:opacity-50">
-                        <span class="truncate" title="${p.name}">${p.name.split(' ')[0]} <span class="team-player-rating text-[9px] text-slate-400">(${p.cote})</span></span>
+                        <input type="checkbox" onchange="togglePresence(${p.id})" ${isChecked ? 'checked' : ''} ${currentUser ? '' : 'disabled'} class="w-4 h-4 text-cyan-600 rounded focus:ring-cyan-500 disabled:opacity-50">
+                        <div class="truncate text-xs">
+                            <div class="font-semibold text-slate-800 truncate">${p.name}</div>
+                            <div class="flex items-center gap-1 mt-0.5">
+                                <span class="px-1.5 py-0.2 text-[10px] font-bold rounded ${cat.badgeColor}">${p.position.substring(0,3)}</span>
+                                <span class="text-[10px] text-slate-500 font-bold team-player-rating">${p.cote}/10</span>
+                                ${p.type === 'REMPLACANT' ? '<span class="text-[9px] text-amber-600 font-bold">(Sub)</span>' : ''}
+                            </div>
+                        </div>
                     `;
                     grid.appendChild(card);
                 });
