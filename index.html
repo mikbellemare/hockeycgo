@@ -404,7 +404,7 @@
                         <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
                             <i class="fa-solid fa-user-gear text-cyan-600"></i> Gestion des Utilisateurs & Accès
                         </h2>
-                        <p class="text-sm text-slate-500">Ajoutez de nouveaux utilisateurs, modifiez leur niveau d'accès, modifiez leurs identifiants ou supprimez des comptes.</p>
+                        <p class="text-sm text-slate-500">Ajoutez de nouveaux utilisateurs, créez leur compte Auth et attribuez leurs rôles.</p>
                     </div>
                     <button onclick="openAddUserModal()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl shadow transition-all flex items-center gap-2 text-sm">
                         <i class="fa-solid fa-user-plus"></i> Nouvel Utilisateur
@@ -470,20 +470,27 @@
         <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
             <div class="flex justify-between items-center border-b border-slate-100 pb-3">
                 <h3 id="user-modal-title" class="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <i class="fa-solid fa-user-plus text-cyan-600"></i> Ajouter un utilisateur autorisé
+                    <i class="fa-solid fa-user-plus text-cyan-600"></i> Créer un utilisateur (Auth & Rôle)
                 </h3>
                 <button onclick="closeUserModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
 
             <form id="user-form" onsubmit="saveUser(event)" class="space-y-4">
+                <div id="user-error" class="hidden p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold"></div>
+
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Identifiant / E-mail</label>
-                    <input type="text" id="user-email" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="nomutilisateur ou email@hockeycgo.local">
+                    <input type="text" id="user-email-input" autocomplete="off" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="ex: jean.dupont (sera jean.dupont@hockeycgo.local)">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Mot de passe initial</label>
+                    <input type="password" id="user-password-input" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Minimum 6 caractères">
                 </div>
 
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Niveau d'accès (Rôle)</label>
-                    <select id="user-role" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                    <select id="user-role-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
                         <option value="ADMIN">ADMIN (Accès complet)</option>
                         <option value="Gestionnaire">Gestionnaire (Alignements & Remplaçants)</option>
                     </select>
@@ -491,7 +498,7 @@
 
                 <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
                     <button type="button" onclick="closeUserModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Annuler</button>
-                    <button type="submit" id="user-modal-submit-btn" class="px-4 py-2 text-sm font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg shadow">Enregistrer</button>
+                    <button type="submit" id="user-modal-submit-btn" class="px-4 py-2 text-sm font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg shadow">Créer le compte</button>
                 </div>
             </form>
         </div>
@@ -655,9 +662,9 @@
 
     <!-- SCRIPT FIREBASE ET APPLICATION -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
-        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // Configuration Firebase
@@ -671,11 +678,15 @@
             measurementId: "G-X10CPF9S9M"
         };
 
-        // Initialisation de Firebase
+        // Initialisation de Firebase principal
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
         const auth = getAuth(app);
         const db = getFirestore(app);
+
+        // Instance secondaire pour créer des comptes Auth sans déconnecter l'Admin actif
+        const secondaryApp = getApps().length > 1 ? getApps()[1] : initializeApp(firebaseConfig, "SecondaryAuthApp");
+        const secondaryAuth = getAuth(secondaryApp);
 
         // Liste officielle des joueurs par défaut si Firestore est vide
         const OFFICIAL_24_PLAYERS = [
@@ -783,10 +794,8 @@
                     subRate: subRate,
                     currentLineup: currentLineup
                 }, { merge: true });
-                console.log("Sauvegarde Firestore réussie.");
             } catch (error) {
-                console.error("Erreur lors de la sauvegarde Firebase (Vérifiez vos règles Firestore) :", error);
-                alert("Erreur d'enregistrement dans Firestore. Vérifiez les règles de sécurité de votre base de données dans la console Firebase.");
+                console.error("Erreur lors de la sauvegarde Firebase :", error);
             }
         }
 
@@ -975,7 +984,7 @@
         function openAddUserModal() {
             if(getCurrentUserRole() !== 'ADMIN') return;
             document.getElementById('user-form').reset();
-            document.getElementById('user-modal-title').innerHTML = `<i class="fa-solid fa-user-plus text-cyan-600"></i> Ajouter un utilisateur autorisé`;
+            document.getElementById('user-error').classList.add('hidden');
             document.getElementById('user-modal').classList.remove('hidden');
         }
 
@@ -983,23 +992,39 @@
             document.getElementById('user-modal').classList.add('hidden');
         }
 
-        function saveUser(e) {
+        async function saveUser(e) {
             e.preventDefault();
             if(getCurrentUserRole() !== 'ADMIN') return;
 
-            let email = document.getElementById('user-email').value.trim();
-            if (!email.includes('@')) {
-                email += '@hockeycgo.local';
+            let userInput = document.getElementById('user-email-input').value.trim();
+            const password = document.getElementById('user-password-input').value.trim();
+            const role = document.getElementById('user-role-input').value;
+            const errorDiv = document.getElementById('user-error');
+            errorDiv.classList.add('hidden');
+
+            if (!userInput) return;
+
+            // Ajout automatique du suffixe @hockeycgo.local si non présent
+            if (!userInput.includes('@')) {
+                userInput += '@hockeycgo.local';
             }
-            const role = document.getElementById('user-role').value;
 
-            if (!email) return;
+            try {
+                // Création directe du compte dans Firebase Auth avec l'instance secondaire
+                await createUserWithEmailAndPassword(secondaryAuth, userInput, password);
+                
+                // Enregistrement des rôles dans Firestore
+                userRoleMap[userInput] = role;
+                await saveStorage();
 
-            userRoleMap[email] = role;
-            saveStorage();
-            closeUserModal();
-            renderUsersTable();
-            alert(`L'utilisateur ${email} a été ajouté avec succès dans la base de données.`);
+                closeUserModal();
+                renderUsersTable();
+                alert(`Succès ! L'utilisateur ${userInput} a été créé dans Firebase Auth et ajouté aux rôles.`);
+            } catch (error) {
+                console.error("Erreur création utilisateur Firebase Auth :", error);
+                errorDiv.innerText = "Erreur : " + (error.message || "Impossible de créer l'utilisateur (déjà existant ou mot de passe trop court).");
+                errorDiv.classList.remove('hidden');
+            }
         }
 
         function deleteUserEmail(email) {
