@@ -654,7 +654,8 @@
                 </div>
 
                 <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                    <button type="button" onclick="closeSubCodeModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Annuler</button>
+                    <!-- CORRECTION : Remplacement de closeSubCodeModal par closeSubGameModal -->
+                    <button type="button" onclick="closeSubGameModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Annuler</button>
                     <button type="submit" class="px-4 py-2 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow">Enregistrer Partie</button>
                 </div>
             </form>
@@ -738,7 +739,6 @@
         let unsubscribeFirestore = null;
 
         function initFirebaseSync() {
-            // S'assure d'attendre que l'état d'auth soit résolu ou que les règles autorisent la lecture
             if (unsubscribeFirestore) unsubscribeFirestore();
 
             unsubscribeFirestore = onSnapshot(leagueDocRef, (docSnap) => {
@@ -811,7 +811,7 @@
             onAuthStateChanged(auth, (user) => {
                 currentUser = user;
                 applyPermissionUI();
-                initFirebaseSync(); // Lance l'écoute une fois l'auth initialisée
+                initFirebaseSync();
                 renderPresenceSelector();
                 renderPlayersTable();
                 renderFinanceTable();
@@ -1745,9 +1745,10 @@
             }
         }
 
+        // CORRECTION : `copyLineupText` au lieu de `copyLineupTest`
         Object.assign(window, {
             switchTab, openLoginModal, closeLoginModal, handleLogin, logout,
-            checkOnlyRegulars, checkAll, generateTeams, movePlayer, copyLineupTest,
+            checkOnlyRegulars, checkAll, generateTeams, movePlayer, copyLineupText,
             renderPlayersTable, resetDefaultPlayers, openPlayerModal, closePlayerModal,
             toggleModalFieldsByType, savePlayer, deletePlayer, updateSeasonCost,
             updateSubCost, openSubGameModal, openSubGameModalForPlayer,
