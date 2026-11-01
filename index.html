@@ -654,7 +654,7 @@
                 </div>
 
                 <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                    <button type="button" onclick="closeSubGameModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Annuler</button>
+                    <button type="button" onclick="closeSubCodeModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Annuler</button>
                     <button type="submit" class="px-4 py-2 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow">Enregistrer Partie</button>
                 </div>
             </form>
@@ -679,17 +679,14 @@
             measurementId: "G-X10CPF9S9M"
         };
 
-        // Initialisation sécurisée de Firebase principal (évite le doublon d'app)
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
         const analytics = getAnalytics(app);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // Instance secondaire pour créer des comptes Auth sans déconnecter l'Admin actif
         const secondaryApp = getApps().length > 1 ? getApps()[1] : initializeApp(firebaseConfig, "SecondaryAuthApp");
         const secondaryAuth = getAuth(secondaryApp);
 
-        // Liste officielle des joueurs par défaut si Firestore est vide
         const OFFICIAL_24_PLAYERS = [
             { id: 1, name: "Patrick Dubé", type: "REGULIER", position: "Gardien", cote: 8.0, phone: "819-697-9273", paid: 592, date: "2026-09-01", method: "Interac / Virement", subGames: [] },
             { id: 2, name: "Mikael Bellemare", type: "REGULIER", position: "Gardien", cote: 8.5, phone: "819-383-7889", paid: 0, date: "", method: "Non spécifié", subGames: [] },
@@ -738,9 +735,13 @@
         let currentLineup = { blanc: [], multicolore: [] };
 
         const leagueDocRef = doc(db, "ligue", "data");
+        let unsubscribeFirestore = null;
 
         function initFirebaseSync() {
-            onSnapshot(leagueDocRef, (docSnap) => {
+            // S'assure d'attendre que l'état d'auth soit résolu ou que les règles autorisent la lecture
+            if (unsubscribeFirestore) unsubscribeFirestore();
+
+            unsubscribeFirestore = onSnapshot(leagueDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     players = data.players || [...OFFICIAL_24_PLAYERS];
@@ -807,10 +808,10 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            initFirebaseSync();
             onAuthStateChanged(auth, (user) => {
                 currentUser = user;
                 applyPermissionUI();
+                initFirebaseSync(); // Lance l'écoute une fois l'auth initialisée
                 renderPresenceSelector();
                 renderPlayersTable();
                 renderFinanceTable();
@@ -1746,7 +1747,7 @@
 
         Object.assign(window, {
             switchTab, openLoginModal, closeLoginModal, handleLogin, logout,
-            checkOnlyRegulars, checkAll, generateTeams, movePlayer, copyLineupText,
+            checkOnlyRegulars, checkAll, generateTeams, movePlayer, copyLineupTest,
             renderPlayersTable, resetDefaultPlayers, openPlayerModal, closePlayerModal,
             toggleModalFieldsByType, savePlayer, deletePlayer, updateSeasonCost,
             updateSubCost, openSubGameModal, openSubGameModalForPlayer,
