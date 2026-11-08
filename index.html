@@ -498,7 +498,7 @@
                     <button onclick="loadHistoricalLineupToMain()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg text-xs shadow">
                         Charger sur le tableau principal
                     </button>
-                    <button onclick="deleteHistoricalLineup(selectedArchive ? selectedArchive.id : null)" class="admin-only px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs">
+                    <button onclick="deleteHistoricalLineup()" class="admin-only px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs">
                         <i class="fa-solid fa-trash mr-1"></i> Supprimer
                     </button>
                 </div>
@@ -1000,9 +1000,11 @@
         }
 
         async function deleteHistoricalLineup(id) {
-            if(!currentUser || !id) return;
+            const targetId = id || (selectedArchive ? selectedArchive.id : null);
+            if(!currentUser || !targetId) return;
+            
             if(confirm("Voulez-vous vraiment supprimer cet alignement publié ?")) {
-                lineupHistory = lineupHistory.filter(h => h.id != id);
+                lineupHistory = lineupHistory.filter(h => h.id != targetId);
                 await saveStorage();
                 renderHistoryDropdown();
                 closeHistoryModal();
