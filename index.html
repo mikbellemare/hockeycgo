@@ -662,7 +662,7 @@
                             + Ajouter Partie
                         </button>
                     </div>
-                    <div id="modal-sub-games-list" class="space-y-1.5 max-h-36 overflow-y-auto text-xs">
+                    <div id="modal-sub-games-list" class="space-y-1.5 max-h-48 overflow-y-auto text-xs">
                         <!-- Liste des parties du Sub -->
                     </div>
                 </div>
@@ -675,15 +675,17 @@
         </div>
     </div>
 
-    <!-- MODAL D'AJOUT D'UNE PARTIE POUR REMPLAÇANT -->
+    <!-- MODAL D'AJOUT ET ÉDITION D'UNE PARTIE POUR REMPLAÇANT -->
     <div id="sub-game-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
             <div class="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 class="text-lg font-bold text-slate-800">Enregistrer une Partie pour Remplaçant</h3>
+                <h3 id="sub-game-modal-title" class="text-lg font-bold text-slate-800">Enregistrer une Partie pour Remplaçant</h3>
                 <button onclick="closeSubGameModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
 
             <form id="sub-game-form" onsubmit="saveSubGame(event)" class="space-y-4">
+                <input type="hidden" id="sub-game-editing-id">
+
                 <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Sélectionner le Remplaçant (Sub)</label>
                     <select id="sub-game-player-id" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none">
@@ -713,12 +715,12 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Statut Paiement</label>
-                        <select id="sub-game-status" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                        <select id="sub-game-status" onchange="toggleSubGameStatusFields(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none">
                             <option value="PAYE">Payé</option>
                             <option value="NON_PAYE">Non Payé</option>
                         </select>
                     </div>
-                    <div>
+                    <div id="sub-game-method-container">
                         <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Méthode</label>
                         <select id="sub-game-method" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none">
                             <option value="Interac / Virement">Interac / Virement</option>
@@ -727,6 +729,11 @@
                             <option value="Non spécifié">Non spécifié</option>
                         </select>
                     </div>
+                </div>
+
+                <div id="sub-game-pay-date-container">
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Date du Paiement</label>
+                    <input type="date" id="sub-game-pay-date" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none">
                 </div>
 
                 <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -880,6 +887,10 @@
                 if (!document.getElementById('history-modal').classList.contains('hidden') && selectedArchive) {
                     openHistoryModal(selectedArchive.id);
                 }
+
+                if (!document.getElementById('player-modal').classList.contains('hidden')) {
+                    renderModalSubGamesList();
+                }
             }, (error) => {
                 console.error("Erreur de synchronisation Firestore :", error);
             });
@@ -1016,11 +1027,12 @@
                     } else if (matchGame.isFree) {
                         statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-800">Partie Gratuite (0$)</span>`;
                     } else if (matchGame.status === 'PAYE') {
-                        statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">✓ Payé (${matchGame.amount}$)</span>`;
+                        const payDateText = matchGame.payDate ? ` le ${matchGame.payDate}` : '';
+                        statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">✓ Payé (${matchGame.amount}$${payDateText})</span>`;
                     } else {
                         statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800">Impayé (${matchGame.amount}$)</span>`;
                         if (currentUser) {
-                            actionBtn = `<button onclick="markSubGamePaid(${sub.id}, ${matchGame.id})" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] shadow">Marquer comme Payé</button>`;
+                            actionBtn = `<button onclick="openSubGameModalForPlayer(${sub.id}, ${matchGame.id})" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] shadow">Régler / Éditer</button>`;
                         }
                     }
 
@@ -1081,12 +1093,14 @@
             const player = players.find(p => p.id === subId);
             if (player) {
                 if (!player.subGames) player.subGames = [];
+                const todayStr = new Date().toISOString().split('T')[0];
                 player.subGames.push({
                     id: Date.now(),
                     date: dateStr,
                     amount: subRate,
                     status: 'PAYE',
                     method: 'Interac / Virement',
+                    payDate: todayStr,
                     isFree: false
                 });
                 saveStorage();
@@ -1805,12 +1819,17 @@
                     gamesDetail = games.map(g => {
                         let badgeHtml = '';
                         if (g.isFree) badgeHtml = `<span class="text-indigo-600 font-bold bg-indigo-50 px-1 rounded">Gratuite (0$)</span>`;
-                        else if (g.status === 'PAYE') badgeHtml = `<span class="text-emerald-700 font-bold">✓ Payé</span>`;
-                        else badgeHtml = currentUser ? `<button onclick="markSubGamePaid(${sub.id}, ${g.id})" class="text-xs text-rose-600 font-bold underline">Régler</button>` : `<span class="text-xs text-rose-600 font-bold">Impayé</span>`;
+                        else if (g.status === 'PAYE') {
+                            const payDateText = g.payDate ? ` (${g.payDate})` : '';
+                            badgeHtml = `<span class="text-emerald-700 font-bold">✓ Payé${payDateText}</span>`;
+                        } else {
+                            badgeHtml = currentUser ? `<button onclick="openSubGameModalForPlayer(${sub.id}, ${g.id})" class="text-xs text-rose-600 font-bold underline">Éditer / Régler</button>` : `<span class="text-xs text-rose-600 font-bold">Impayé</span>`;
+                        }
 
-                        let deleteBtn = currentUser ? `<button onclick="deleteSubGame(${sub.id}, ${g.id})" class="text-slate-400 hover:text-rose-600 ml-1"><i class="fa-solid fa-xmark"></i></button>` : '';
+                        let editBtn = currentUser ? `<button onclick="openSubGameModalForPlayer(${sub.id}, ${g.id})" class="text-cyan-600 hover:text-cyan-800 ml-1" title="Éditer la partie"><i class="fa-solid fa-pen"></i></button>` : '';
+                        let deleteBtn = currentUser ? `<button onclick="deleteSubGame(${sub.id}, ${g.id})" class="text-slate-400 hover:text-rose-600 ml-1" title="Supprimer"><i class="fa-solid fa-xmark"></i></button>` : '';
 
-                        return `<div class="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[11px] mr-1 mb-1"><span>${g.date}</span> ${badgeHtml} ${deleteBtn}</div>`;
+                        return `<div class="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[11px] mr-1 mb-1"><span>${g.date}</span> ${badgeHtml} ${editBtn} ${deleteBtn}</div>`;
                     }).join('');
                 } else {
                     gamesDetail = `<span class="text-xs text-slate-400 italic">Aucune partie</span>`;
@@ -1927,21 +1946,27 @@
                     const div = document.createElement('div');
                     div.className = "flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200 gap-2";
                     
-                    let statusToggleBtn = '';
+                    let statusBadge = '';
                     if (g.isFree) {
-                        statusToggleBtn = `<span class="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">Gratuite (0$)</span>`;
+                        statusBadge = `<span class="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">Gratuite (0$)</span>`;
                     } else if (g.status === 'PAYE') {
-                        statusToggleBtn = `<button type="button" onclick="toggleSubGameStatus(${player.id}, ${g.id})" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold hover:bg-emerald-200 transition-colors">✓ Payé (${g.amount}$)</button>`;
+                        const payDateStr = g.payDate ? ` le ${g.payDate}` : '';
+                        statusBadge = `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">✓ Payé (${g.amount}$${payDateStr})</span>`;
                     } else {
-                        statusToggleBtn = `<button type="button" onclick="toggleSubGameStatus(${player.id}, ${g.id})" class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold hover:bg-rose-200 transition-colors">Impayé (${g.amount}$) - Cliquer pour payer</button>`;
+                        statusBadge = `<span class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold">Impayé (${g.amount}$)</span>`;
                     }
 
                     div.innerHTML = `
                         <div class="flex items-center gap-2 truncate">
                             <span class="font-semibold">${g.date}</span>
-                            ${statusToggleBtn}
+                            ${statusBadge}
                         </div>
-                        <button type="button" onclick="deleteSubGame(${player.id}, ${g.id})" class="text-rose-600 font-bold hover:underline">Supprimer</button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="openSubGameModalForPlayer(${player.id}, ${g.id})" class="px-2 py-0.5 bg-amber-100 text-amber-800 hover:bg-amber-200 rounded font-bold text-xs flex items-center gap-1">
+                                <i class="fa-solid fa-pen"></i> Éditer
+                            </button>
+                            <button type="button" onclick="deleteSubGame(${player.id}, ${g.id})" class="text-rose-600 font-bold hover:underline">Supprimer</button>
+                        </div>
                     `;
                     container.appendChild(div);
                 });
@@ -1950,16 +1975,21 @@
             }
         }
 
-        function toggleSubGameStatus(subId, gameId) {
-            if(!currentUser) return;
-            const player = players.find(p => p.id === subId);
-            if (player && player.subGames) {
-                const game = player.subGames.find(g => g.id === gameId);
-                if (game) {
-                    game.status = (game.status === 'PAYE') ? 'NON_PAYE' : 'PAYE';
-                    saveStorage();
-                    renderModalSubGamesList();
+        function toggleSubGameStatusFields(status) {
+            const methodContainer = document.getElementById('sub-game-method-container');
+            const payDateContainer = document.getElementById('sub-game-pay-date-container');
+            const isFree = document.getElementById('sub-game-free').checked;
+
+            if (status === 'PAYE' && !isFree) {
+                if(methodContainer) methodContainer.classList.remove('hidden');
+                if(payDateContainer) payDateContainer.classList.remove('hidden');
+                const payDateInput = document.getElementById('sub-game-pay-date');
+                if (payDateInput && !payDateInput.value) {
+                    payDateInput.value = new Date().toISOString().split('T')[0];
                 }
+            } else {
+                if(methodContainer) methodContainer.classList.add('hidden');
+                if(payDateContainer) payDateContainer.classList.add('hidden');
             }
         }
 
@@ -2046,22 +2076,60 @@
                 amountInput.value = amountInput.dataset.prev || subRate;
                 amountInput.disabled = false;
             }
+            toggleSubGameStatusFields(document.getElementById('sub-game-status').value);
         }
 
-        function openSubGameModal() {
+        function openSubGameModal(subId = null, gameId = null) {
             if(!currentUser) return;
             populateSubDropdown();
             document.getElementById('sub-game-form').reset();
+
+            const titleEl = document.getElementById('sub-game-modal-title');
+            const editingIdEl = document.getElementById('sub-game-editing-id');
+            const playerSelect = document.getElementById('sub-game-player-id');
+
+            if (subId && gameId) {
+                const player = players.find(p => p.id === subId);
+                const game = player ? (player.subGames || []).find(g => g.id === gameId) : null;
+                if (player && game) {
+                    titleEl.innerText = "Éditer la Partie du Remplaçant";
+                    editingIdEl.value = game.id;
+                    playerSelect.value = subId;
+                    playerSelect.disabled = true;
+
+                    document.getElementById('sub-game-date').value = game.date || '';
+                    document.getElementById('sub-game-free').checked = !!game.isFree;
+                    document.getElementById('sub-game-amount').value = game.isFree ? 0 : (game.amount !== undefined ? game.amount : subRate);
+                    document.getElementById('sub-game-amount').disabled = !!game.isFree;
+                    document.getElementById('sub-game-status').value = game.status || 'PAYE';
+                    document.getElementById('sub-game-method').value = game.method || 'Interac / Virement';
+                    document.getElementById('sub-game-pay-date').value = game.payDate || game.date || new Date().toISOString().split('T')[0];
+
+                    toggleSubGameStatusFields(document.getElementById('sub-game-status').value);
+                    document.getElementById('sub-game-modal').classList.remove('hidden');
+                    return;
+                }
+            }
+
+            titleEl.innerText = "Enregistrer une Partie pour Remplaçant";
+            editingIdEl.value = '';
+            playerSelect.disabled = false;
+            if (subId) playerSelect.value = subId;
+
             document.getElementById('sub-game-amount').value = subRate;
             document.getElementById('sub-game-amount').disabled = false;
             document.getElementById('sub-game-free').checked = false;
             document.getElementById('sub-game-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('sub-game-status').value = 'PAYE';
+            document.getElementById('sub-game-method').value = 'Interac / Virement';
+            document.getElementById('sub-game-pay-date').value = new Date().toISOString().split('T')[0];
+
+            toggleSubGameStatusFields('PAYE');
             document.getElementById('sub-game-modal').classList.remove('hidden');
         }
 
-        function openSubGameModalForPlayer(subId) {
-            openSubGameModal();
-            document.getElementById('sub-game-player-id').value = subId;
+        function openSubGameModalForPlayer(subId, gameId = null) {
+            openSubGameModal(subId, gameId);
         }
 
         function openSubGameModalFromPlayer() {
@@ -2074,6 +2142,7 @@
 
         function closeSubGameModal() {
             document.getElementById('sub-game-modal').classList.add('hidden');
+            document.getElementById('sub-game-player-id').disabled = false;
         }
 
         function saveSubGame(e) {
@@ -2081,16 +2150,35 @@
             if(!currentUser) return;
 
             const subId = parseInt(document.getElementById('sub-game-player-id').value);
+            const editingGameId = parseInt(document.getElementById('sub-game-editing-id').value);
             const date = document.getElementById('sub-game-date').value;
             const isFree = document.getElementById('sub-game-free').checked;
             const amount = isFree ? 0 : (parseFloat(document.getElementById('sub-game-amount').value) || 25);
             const status = isFree ? 'PAYE' : document.getElementById('sub-game-status').value;
             const method = isFree ? 'Gratuit / Ignoré' : document.getElementById('sub-game-method').value;
+            const payDate = (status === 'PAYE' && !isFree) ? document.getElementById('sub-game-pay-date').value : '';
 
             const player = players.find(p => p.id === subId);
             if (player) {
                 if (!player.subGames) player.subGames = [];
-                player.subGames.push({ id: Date.now(), date, amount, status, method, isFree });
+
+                if (editingGameId) {
+                    const game = player.subGames.find(g => g.id === editingGameId);
+                    if (game) {
+                        game.date = date;
+                        game.amount = amount;
+                        game.status = status;
+                        game.method = method;
+                        game.payDate = payDate;
+                        game.isFree = isFree;
+                    }
+                } else {
+                    player.subGames.push({
+                        id: Date.now(),
+                        date, amount, status, method, payDate, isFree
+                    });
+                }
+
                 saveStorage();
                 closeSubGameModal();
             }
@@ -2098,14 +2186,7 @@
 
         function markSubGamePaid(subId, gameId) {
             if(!currentUser) return;
-            const player = players.find(p => p.id === subId);
-            if (player && player.subGames) {
-                const game = player.subGames.find(g => g.id === gameId);
-                if (game) {
-                    game.status = 'PAYE';
-                    saveStorage();
-                }
-            }
+            openSubGameModalForPlayer(subId, gameId);
         }
 
         function deleteSubGame(subId, gameId) {
@@ -2165,7 +2246,7 @@
         window.loadHistoricalLineupToMain = loadHistoricalLineupToMain;
         window.quickAddSubGameFromHistory = quickAddSubGameFromHistory;
         window.restoreCurrentActiveLineup = restoreCurrentActiveLineup;
-        window.toggleSubGameStatus = toggleSubGameStatus;
+        window.toggleSubGameStatusFields = toggleSubGameStatusFields;
     </script>
 </body>
 </html>
