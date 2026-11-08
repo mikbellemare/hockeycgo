@@ -138,7 +138,7 @@
                         <i class="fa-solid fa-clock-rotate-left text-cyan-600 text-lg"></i>
                         <div>
                             <h3 class="text-sm font-bold text-slate-800">Historique des alignements précédents</h3>
-                            <p class="text-[11px] text-slate-500">Consultez les alignements et présences des semaines antérieures enregistrées.</p>
+                            <p class="text-[11px] text-slate-500">Consultez les alignements et vérifiez les paiements des remplaçants par partie.</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2 w-full sm:w-auto">
@@ -456,6 +456,54 @@
 
     </main>
 
+    <!-- ================= MODAL D'INSPECTION D'HISTORIQUE ================= -->
+    <div id="history-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2" id="history-modal-title">
+                    <i class="fa-solid fa-clock-rotate-left text-cyan-600"></i> Détails de la partie archivée
+                </h3>
+                <button onclick="closeHistoryModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <!-- Statut des Remplaçants pour ce match -->
+            <div class="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                <h4 class="text-xs font-bold text-amber-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <i class="fa-solid fa-user-clock"></i> Remplaçants (Subs) présents et statut de paiement
+                </h4>
+                <div id="history-subs-list" class="space-y-2 text-xs">
+                    <!-- Généré par JS -->
+                </div>
+            </div>
+
+            <!-- Alignements du match -->
+            <div class="grid sm:grid-cols-2 gap-4">
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <h5 class="font-bold text-slate-700 mb-2 border-b border-slate-200 pb-1 flex items-center justify-between text-xs">
+                        <span>ÉQUIPE BLANC</span>
+                    </h5>
+                    <div id="history-team-blanc" class="space-y-1 text-xs"></div>
+                </div>
+
+                <div class="bg-pink-50/50 p-3 rounded-xl border border-pink-100">
+                    <h5 class="font-bold text-pink-700 mb-2 border-b border-pink-200 pb-1 flex items-center justify-between text-xs">
+                        <span>ÉQUIPE MULTICOLORE</span>
+                    </h5>
+                    <div id="history-team-multicolore" class="space-y-1 text-xs"></div>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center pt-3 border-t border-slate-100">
+                <button onclick="loadHistoricalLineupToMain()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg text-xs shadow">
+                    Charger sur le tableau principal
+                </button>
+                <button onclick="closeHistoryModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs">
+                    Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ================= MODAL DE CONNEXION FIREBASE AUTH ================= -->
     <div id="login-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-6 space-y-4">
@@ -757,6 +805,7 @@
         let selectedPresenceIds = new Set();
         let currentLineup = { blanc: [], multicolore: [] };
         let lineupHistory = []; // Historique des alignements précédents
+        let selectedArchive = null; // Archive sélectionnée courante
 
         const leagueDocRef = doc(db, "ligue", "data");
         let unsubscribeFirestore = null;
@@ -823,6 +872,11 @@
                 }
                 
                 applyPermissionUI();
+
+                // Si la fenêtre d'historique est ouverte, rafraîchir son contenu
+                if (!document.getElementById('history-modal').classList.contains('hidden') && selectedArchive) {
+                    openHistoryModal(selectedArchive.id);
+                }
             }, (error) => {
                 console.error("Erreur de synchronisation Firestore :", error);
             });
@@ -852,18 +906,20 @@
             btn.disabled = true;
 
             try {
-                // Ajouter l'état actuel à l'historique lors d'une sauvegarde manuelle
-                const nowStr = new Date().toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' });
+                const now = new Date();
+                const isoDate = now.toISOString().split('T')[0];
+                const nowStr = now.toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' });
+                
                 const archiveEntry = {
                     id: Date.now(),
+                    dateISO: isoDate,
                     dateLabel: `Alignement du ${nowStr}`,
                     lineup: JSON.parse(JSON.stringify(currentLineup)),
                     presences: Array.from(selectedPresenceIds)
                 };
 
-                // Éviter les doublons exacts récents, garder max 10 archives
                 lineupHistory.unshift(archiveEntry);
-                if (lineupHistory.length > 10) lineupHistory.pop();
+                if (lineupHistory.length > 15) lineupHistory.pop();
 
                 await saveStorage();
                 renderHistoryDropdown();
@@ -887,8 +943,7 @@
             const select = document.getElementById('history-select');
             if(!select) return;
             
-            // Conserver l'option par défaut
-            select.innerHTML = `<option value="">-- Historique des semaines précédentes (${lineupHistory.length}) --</option>`;
+            select.innerHTML = `<option value="">-- Inspecter une archive (${lineupHistory.length}) --</option>`;
             
             lineupHistory.forEach((item) => {
                 const opt = document.createElement('option');
@@ -900,21 +955,136 @@
 
         function loadHistoricalLineup(id) {
             if (!id) return;
+            openHistoryModal(id);
+        }
+
+        function openHistoryModal(id) {
             const archive = lineupHistory.find(h => h.id == id);
             if (!archive) return;
+            selectedArchive = archive;
 
-            // Afficher temporairement l'alignement archivé
-            currentLineup = archive.lineup;
+            document.getElementById('history-modal-title').innerText = archive.dateLabel;
+
+            // Extraire tous les joueurs et remplaçants de l'archive
+            const allArchivePlayers = [...(archive.lineup.blanc || []), ...(archive.lineup.multicolore || [])];
+            
+            // Trouver les remplaçants présents ce soir-là
+            const subPresenceList = [];
+            allArchivePlayers.forEach(pArchive => {
+                const actualPlayer = players.find(p => p.id === pArchive.id);
+                if (actualPlayer && actualPlayer.type === 'REMPLACANT') {
+                    subPresenceList.push(actualPlayer);
+                }
+            });
+
+            const subsContainer = document.getElementById('history-subs-list');
+            subsContainer.innerHTML = '';
+
+            if (subPresenceList.length === 0) {
+                subsContainer.innerHTML = `<p class="text-slate-500 italic">Aucun remplaçant (Sub) présent dans cet alignement.</p>`;
+            } else {
+                const archiveDate = archive.dateISO || new Date(archive.id).toISOString().split('T')[0];
+
+                subPresenceList.forEach(sub => {
+                    const games = sub.subGames || [];
+                    // Chercher si la partie a été enregistrée pour ce jour
+                    const matchGame = games.find(g => g.date === archiveDate);
+
+                    const div = document.createElement('div');
+                    div.className = "flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-2.5 rounded-lg border border-amber-200 gap-2";
+
+                    let statusBadge = '';
+                    let actionBtn = '';
+
+                    if (!matchGame) {
+                        statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-600">Non inscrite dans la fiche</span>`;
+                        if (currentUser) {
+                            actionBtn = `<button onclick="quickAddSubGameFromHistory(${sub.id}, '${archiveDate}')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-[11px] shadow">+ Inscrire partie (25$)</button>`;
+                        }
+                    } else if (matchGame.isFree) {
+                        statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-800">Partie Gratuite (0$)</span>`;
+                    } else if (matchGame.status === 'PAYE') {
+                        statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">✓ Payé (${matchGame.amount}$)</span>`;
+                    } else {
+                        statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800">Impayé (${matchGame.amount}$)</span>`;
+                        if (currentUser) {
+                            actionBtn = `<button onclick="markSubGamePaid(${sub.id}, ${matchGame.id})" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] shadow">Marquer comme Payé</button>`;
+                        }
+                    }
+
+                    div.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-user-clock text-amber-600"></i>
+                            <span class="font-bold text-slate-800">${sub.name}</span>
+                            <span class="text-slate-400">(${sub.position})</span>
+                        </div>
+                        <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                            ${statusBadge}
+                            ${actionBtn}
+                        </div>
+                    `;
+                    subsContainer.appendChild(div);
+                });
+            }
+
+            // Remplir les effectifs Blanc vs Multicolore
+            const fillTeam = (teamList, containerId) => {
+                const c = document.getElementById(containerId);
+                c.innerHTML = '';
+                if (!teamList || teamList.length === 0) {
+                    c.innerHTML = `<p class="text-slate-400 italic">Aucun joueur</p>`;
+                    return;
+                }
+                teamList.forEach(p => {
+                    const row = document.createElement('div');
+                    row.className = "flex justify-between items-center py-1 border-b border-slate-100 last:border-0";
+                    row.innerHTML = `
+                        <span><b>${p.name}</b> ${p.type === 'REMPLACANT' ? '<span class="text-amber-600 font-bold">(Sub)</span>' : ''}</span>
+                        <span class="text-slate-500 font-bold">${p.position}</span>
+                    `;
+                    c.appendChild(row);
+                });
+            };
+
+            fillTeam(archive.lineup.blanc, 'history-team-blanc');
+            fillTeam(archive.lineup.multicolore, 'history-team-multicolore');
+
+            document.getElementById('history-modal').classList.remove('hidden');
+        }
+
+        function closeHistoryModal() {
+            document.getElementById('history-modal').classList.add('hidden');
+            document.getElementById('history-select').value = "";
+        }
+
+        function loadHistoricalLineupToMain() {
+            if (!selectedArchive) return;
+            currentLineup = selectedArchive.lineup;
             renderTeams();
-
-            // Afficher le bouton pour revenir à l'actuel
             document.getElementById('btn-restore-current').classList.remove('hidden');
+            closeHistoryModal();
+        }
+
+        function quickAddSubGameFromHistory(subId, dateStr) {
+            if(!currentUser) return;
+            const player = players.find(p => p.id === subId);
+            if (player) {
+                if (!player.subGames) player.subGames = [];
+                player.subGames.push({
+                    id: Date.now(),
+                    date: dateStr,
+                    amount: subRate,
+                    status: 'PAYE',
+                    method: 'Interac / Virement',
+                    isFree: false
+                });
+                saveStorage();
+            }
         }
 
         function restoreCurrentActiveLineup() {
             document.getElementById('history-select').value = "";
             document.getElementById('btn-restore-current').classList.add('hidden');
-            // Recharger depuis Firestore en forçant l'affichage de l'actuel
             initFirebaseSync();
         }
 
@@ -1221,7 +1391,7 @@
                 if(p.type === 'REGULIER') selectedPresenceIds.add(p.id);
             });
             renderPresenceSelector();
-            saveStorage(); // Sauvegarde immédiate
+            saveStorage();
         }
 
         function switchTab(tab) {
@@ -1323,7 +1493,7 @@
             if (selectedPresenceIds.has(id)) selectedPresenceIds.delete(id);
             else selectedPresenceIds.add(id);
             renderPresenceSelector();
-            saveStorage(); // Sauvegarde immédiate lors du cochage/décochage des joueurs et remplaçants
+            saveStorage();
         }
 
         function checkAll(status) {
@@ -1331,7 +1501,7 @@
             if (status) players.forEach(p => selectedPresenceIds.add(p.id));
             else selectedPresenceIds.clear();
             renderPresenceSelector();
-            saveStorage(); // Sauvegarde immédiate
+            saveStorage();
         }
 
         function generateTeams() {
@@ -1393,15 +1563,18 @@
 
             currentLineup = { blanc: teamBlanc, multicolore: teamMulticolore };
             
-            // Archiver automatiquement dans l'historique lors de la génération
-            const nowStr = new Date().toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' });
+            const now = new Date();
+            const isoDate = now.toISOString().split('T')[0];
+            const nowStr = now.toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' });
+
             lineupHistory.unshift({
                 id: Date.now(),
+                dateISO: isoDate,
                 dateLabel: `Alignement généré du ${nowStr}`,
                 lineup: JSON.parse(JSON.stringify(currentLineup)),
                 presences: Array.from(selectedPresenceIds)
             });
-            if (lineupHistory.length > 10) lineupHistory.pop();
+            if (lineupHistory.length > 15) lineupHistory.pop();
 
             saveStorage();
             renderTeams();
@@ -1491,441 +1664,3 @@
             text += `⚪ *ÉQUIPE BLANC*\n`;
             text += `G: ${currentLineup.blanc.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
             text += `DEF: ${currentLineup.blanc.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `ATT: ${currentLineup.blanc.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n\n`;
-            text += `🎨 *ÉQUIPE MULTICOLORE*\n`;
-            text += `G: ${currentLineup.multicolore.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `DEF: ${currentLineup.multicolore.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `ATT: ${currentLineup.multicolore.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-
-            navigator.clipboard.writeText(text);
-            alert("Alignement copié dans le presse-papier !");
-        }
-
-        function renderPlayersTable() {
-            const tbody = document.getElementById('players-table-body');
-            if(!tbody) return;
-            tbody.innerHTML = '';
-
-            const isAdmin = (getCurrentUserRole() === 'ADMIN');
-            const statusColHeader = document.querySelector('.payment-status-col');
-            if(statusColHeader) {
-                if(isAdmin) statusColHeader.classList.remove('hidden');
-                else statusColHeader.classList.add('hidden');
-            }
-
-            const search = document.getElementById('search-player').value.toLowerCase();
-            const filterType = document.getElementById('filter-type').value;
-            const filterPos = document.getElementById('filter-position').value;
-
-            const filtered = players.filter(p => {
-                const matchSearch = p.name.toLowerCase().includes(search) || (currentUser && p.phone && p.phone.includes(search));
-                const matchType = filterType === 'ALL' || p.type === filterType;
-                const matchPos = filterPos === 'ALL' || p.position === filterPos;
-                return matchSearch && matchType && matchPos;
-            });
-
-            filtered.forEach((p, index) => {
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition-colors";
-
-                let statusBadge = '';
-                if (p.type === 'REGULIER') {
-                    const isPaid = p.paid >= seasonCost;
-                    const isPartial = p.paid > 0 && p.paid < seasonCost;
-                    if(isPaid) statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">Payé (${p.paid}$)</span>`;
-                    else if(isPartial) statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">Partiel (${p.paid}$)</span>`;
-                    else statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">Non payé</span>`;
-                } else {
-                    const games = (p.subGames || []).filter(g => !g.isFree);
-                    const unpaidGames = games.filter(g => g.status !== 'PAYE').length;
-                    if ((p.subGames || []).length === 0) statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">0 partie</span>`;
-                    else if (unpaidGames === 0) statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">À jour</span>`;
-                    else statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">${unpaidGames} impayée(s)</span>`;
-                }
-
-                const actionsHtml = currentUser ? `
-                    <button onclick="openPlayerModal(${p.id})" class="p-1.5 text-cyan-600 hover:text-cyan-800 hover:bg-cyan-50 rounded"><i class="fa-solid fa-pen-to-square"></i></button>
-                    <button onclick="deletePlayer(${p.id})" class="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded"><i class="fa-solid fa-trash"></i></button>
-                ` : `<span class="text-xs text-slate-400 italic">Lecture seule</span>`;
-
-                const phoneDisplay = currentUser ? (p.phone || '-') : '<span class="text-slate-400 italic">Connectez-vous</span>';
-
-                tr.innerHTML = `
-                    <td class="p-3 font-bold text-slate-400">${index + 1}</td>
-                    <td class="p-3 font-semibold text-slate-800">${p.name}</td>
-                    <td class="p-3"><span class="px-2 py-0.5 rounded text-[11px] font-bold ${p.type === 'REGULIER' ? 'bg-cyan-100 text-cyan-800' : 'bg-amber-100 text-amber-800'}">${p.type === 'REGULIER' ? 'Régulier' : 'Remplaçant'}</span></td>
-                    <td class="p-3">${p.position}</td>
-                    <td class="p-3 font-bold text-slate-700 team-player-rating">${p.cote}/10</td>
-                    <td class="p-3 text-slate-500">${phoneDisplay}</td>
-                    ${isAdmin ? `<td class="p-3 payment-status-col">${statusBadge}</td>` : ''}
-                    <td class="p-3 text-right space-x-1">${actionsHtml}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        function renderFinanceTable() {
-            const tbody = document.getElementById('finance-table-body');
-            if(!tbody) return;
-            tbody.innerHTML = '';
-            const reguliers = players.filter(p => p.type === 'REGULIER');
-
-            reguliers.forEach(p => {
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition-colors";
-                const solde = seasonCost - p.paid;
-                const isPartial = p.paid > 0 && p.paid < seasonCost;
-
-                let statusClass = "bg-emerald-100 text-emerald-800";
-                let statusLabel = "À jour";
-                if (isPartial) { statusClass = "bg-amber-100 text-amber-800"; statusLabel = "Incomplet"; }
-                if (p.paid === 0) { statusClass = "bg-rose-100 text-rose-800"; statusLabel = "En attente"; }
-
-                const actionBtn = (getCurrentUserRole() === 'ADMIN') ? `
-                    <button onclick="openPlayerModal(${p.id})" class="px-2.5 py-1 text-xs font-semibold bg-cyan-50 text-cyan-700 hover:bg-cyan-100 rounded">Paiement</button>
-                ` : `<span class="text-xs text-slate-400 italic">Accès restreint</span>`;
-
-                tr.innerHTML = `
-                    <td class="p-3 font-semibold text-slate-800">${p.name}</td>
-                    <td class="p-3 font-bold text-slate-800">${p.paid.toFixed(2)} $</td>
-                    <td class="p-3 font-semibold ${solde > 0 ? 'text-amber-600' : 'text-slate-400'}">${solde > 0 ? solde.toFixed(2) + ' $' : '0.00 $'}</td>
-                    <td class="p-3 text-xs text-slate-500">${p.date || '-'}</td>
-                    <td class="p-3 text-xs text-slate-600">${p.method || 'Non spécifié'}</td>
-                    <td class="p-3"><span class="px-2 py-0.5 rounded text-[11px] font-bold ${statusClass}">${statusLabel}</span></td>
-                    <td class="p-3 text-right">${actionBtn}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        function renderSubFinanceTable() {
-            const tbody = document.getElementById('sub-finance-table-body');
-            tbody.innerHTML = '';
-            const subs = players.filter(p => p.type === 'REMPLACANT');
-
-            if (subs.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400 italic">Aucun remplaçant enregistré.</td></tr>`;
-                return;
-            }
-
-            subs.forEach(sub => {
-                const games = sub.subGames || [];
-                const paidOrUnpaidGames = games.filter(g => !g.isFree);
-                const totalDue = paidOrUnpaidGames.reduce((acc, g) => acc + g.amount, 0);
-                const totalPaid = paidOrUnpaidGames.filter(g => g.status === 'PAYE').reduce((acc, g) => acc + g.amount, 0);
-                const unpaid = totalDue - totalPaid;
-
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-amber-50/50 transition-colors";
-
-                let gamesDetail = '';
-                if (games.length > 0) {
-                    gamesDetail = games.map(g => {
-                        let badgeHtml = '';
-                        if (g.isFree) badgeHtml = `<span class="text-indigo-600 font-bold bg-indigo-50 px-1 rounded">Gratuite (0$)</span>`;
-                        else if (g.status === 'PAYE') badgeHtml = `<span class="text-emerald-700 font-bold">✓ Payé</span>`;
-                        else badgeHtml = currentUser ? `<button onclick="markSubGamePaid(${sub.id}, ${g.id})" class="text-xs text-rose-600 font-bold underline">Régler</button>` : `<span class="text-xs text-rose-600 font-bold">Impayé</span>`;
-
-                        let deleteBtn = currentUser ? `<button onclick="deleteSubGame(${sub.id}, ${g.id})" class="text-slate-400 hover:text-rose-600 ml-1"><i class="fa-solid fa-xmark"></i></button>` : '';
-
-                        return `<div class="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[11px] mr-1 mb-1"><span>${g.date}</span> ${badgeHtml} ${deleteBtn}</div>`;
-                    }).join('');
-                } else {
-                    gamesDetail = `<span class="text-xs text-slate-400 italic">Aucune partie</span>`;
-                }
-
-                const actionBtn = currentUser ? `<button onclick="openSubGameModalForPlayer(${sub.id})" class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 rounded">+ Partie</button>` : '';
-
-                tr.innerHTML = `
-                    <td class="p-3 font-semibold text-slate-800">${sub.name}</td>
-                    <td class="p-3 max-w-xs">${gamesDetail}</td>
-                    <td class="p-3 font-bold text-slate-800">${totalDue.toFixed(2)} $</td>
-                    <td class="p-3 font-bold text-emerald-700">${totalPaid.toFixed(2)} $</td>
-                    <td class="p-3 font-bold ${unpaid > 0 ? 'text-rose-600' : 'text-slate-400'}">${unpaid.toFixed(2)} $</td>
-                    <td class="p-3 text-right">${actionBtn}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        function updateFinanceStats() {
-            const reguliers = players.filter(p => p.type === 'REGULIER');
-            const subs = players.filter(p => p.type === 'REMPLACANT');
-            const totalPercuReg = reguliers.reduce((acc, p) => acc + (p.paid || 0), 0);
-            
-            let totalPayableSubGamesCount = 0;
-            let totalPercuSubs = 0;
-            let totalImpayeSubs = 0;
-
-            subs.forEach(s => {
-                const games = (s.subGames || []).filter(g => !g.isFree);
-                totalPayableSubGamesCount += games.length;
-                games.forEach(g => {
-                    if (g.status === 'PAYE') totalPercuSubs += g.amount;
-                    else totalImpayeSubs += g.amount;
-                });
-            });
-
-            const totalPercuCombined = totalPercuReg + totalPercuSubs;
-            const totalAttenduReg = reguliers.length * seasonCost;
-            const soldeCollecterReg = Math.max(0, totalAttenduReg - totalPercuReg);
-            const totalCollecterCombined = soldeCollecterReg + totalImpayeSubs;
-            const countPayeReg = reguliers.filter(p => p.paid >= seasonCost).length;
-
-            document.getElementById('total-percu').innerText = totalPercuCombined.toLocaleString('fr-CA', { minimumFractionDigits: 2 }) + ' $';
-            document.getElementById('total-percu-subs').innerText = totalPercuSubs.toLocaleString('fr-CA', { minimumFractionDigits: 2 }) + ' $';
-            document.getElementById('total-a-collecter').innerText = totalCollecterCombined.toLocaleString('fr-CA', { minimumFractionDigits: 2 }) + ' $';
-            document.getElementById('total-impaye-subs').innerText = totalImpayeSubs.toLocaleString('fr-CA', { minimumFractionDigits: 2 }) + ' $';
-            document.getElementById('count-paye').innerText = countPayeReg;
-            document.getElementById('count-total-reg').innerText = reguliers.length;
-            document.getElementById('count-sub-games').innerText = totalPayableSubGamesCount;
-        }
-
-        function openPlayerModal(id = null) {
-            if(!currentUser) return;
-            const form = document.getElementById('player-form');
-            form.reset();
-
-            if (id) {
-                const player = players.find(p => p.id === id);
-                if (player) {
-                    document.getElementById('modal-title').innerText = "Éditer le Joueur";
-                    document.getElementById('modal-player-id').value = player.id;
-                    document.getElementById('modal-name').value = player.name;
-                    document.getElementById('modal-type').value = player.type;
-                    document.getElementById('modal-position').value = player.position;
-                    document.getElementById('modal-cote').value = player.cote;
-                    document.getElementById('modal-phone').value = player.phone || '';
-                    document.getElementById('modal-paid').value = player.paid || 0;
-                    document.getElementById('modal-pay-date').value = player.date || '';
-                    document.getElementById('modal-pay-method').value = player.method || 'Non spécifié';
-                }
-            } else {
-                document.getElementById('modal-title').innerText = "Nouveau Joueur";
-                document.getElementById('modal-player-id').value = '';
-                document.getElementById('modal-pay-date').value = new Date().toISOString().split('T')[0];
-            }
-
-            toggleModalFieldsByType();
-            document.getElementById('player-modal').classList.remove('hidden');
-        }
-
-        function closePlayerModal() {
-            document.getElementById('player-modal').classList.add('hidden');
-        }
-
-        function toggleModalFieldsByType() {
-            const type = document.getElementById('modal-type').value;
-            const regFields = document.getElementById('regular-payment-fields');
-            const subFields = document.getElementById('sub-history-fields');
-
-            if (type === 'REGULIER') {
-                regFields.classList.remove('hidden');
-                subFields.classList.add('hidden');
-            } else {
-                regFields.classList.add('hidden');
-                subFields.classList.remove('hidden');
-                renderModalSubGamesList();
-            }
-        }
-
-        function renderModalSubGamesList() {
-            const playerId = parseInt(document.getElementById('modal-player-id').value);
-            const container = document.getElementById('modal-sub-games-list');
-            container.innerHTML = '';
-
-            if (!playerId) {
-                container.innerHTML = `<p class="text-slate-400 italic">Enregistrez d'abord le remplaçant.</p>`;
-                return;
-            }
-
-            const player = players.find(p => p.id === playerId);
-            if (player && player.subGames && player.subGames.length > 0) {
-                player.subGames.forEach(g => {
-                    const div = document.createElement('div');
-                    div.className = "flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200";
-                    div.innerHTML = `
-                        <span>${g.date} - <b>${g.isFree ? 'Gratuite (0$)' : g.amount + '$'}</b></span>
-                        <button type="button" onclick="deleteSubGame(${player.id}, ${g.id})" class="text-rose-600 font-bold hover:underline">Supprimer</button>
-                    `;
-                    container.appendChild(div);
-                });
-            } else {
-                container.innerHTML = `<p class="text-slate-400 italic">Aucune partie enregistrée</p>`;
-            }
-        }
-
-        function savePlayer(e) {
-            e.preventDefault();
-            if(!currentUser) return;
-
-            const id = parseInt(document.getElementById('modal-player-id').value);
-            const name = document.getElementById('modal-name').value.trim();
-            const type = document.getElementById('modal-type').value;
-            const position = document.getElementById('modal-position').value;
-            const cote = parseFloat(document.getElementById('modal-cote').value) || 7.0;
-            const phone = document.getElementById('modal-phone').value.trim();
-            const paid = parseFloat(document.getElementById('modal-paid').value) || 0;
-            const date = document.getElementById('modal-pay-date').value;
-            const method = document.getElementById('modal-pay-method').value;
-            const isAdmin = (getCurrentUserRole() === 'ADMIN');
-
-            if (id) {
-                const p = players.find(x => x.id === id);
-                if (p) {
-                    p.name = name;
-                    p.type = type;
-                    p.position = position;
-                    p.cote = cote;
-                    p.phone = phone;
-                    if(type === 'REGULIER' && isAdmin) {
-                        p.paid = paid;
-                        p.date = date;
-                        p.method = method;
-                    }
-                }
-            } else {
-                const newPlayer = {
-                    id: Date.now(),
-                    name, type, position, cote, phone,
-                    paid: (type === 'REGULIER' && isAdmin) ? paid : 0,
-                    date: (type === 'REGULIER' && isAdmin) ? date : '',
-                    method: (type === 'REGULIER' && isAdmin) ? method : 'Non spécifié',
-                    subGames: []
-                };
-                players.push(newPlayer);
-                selectedPresenceIds.add(newPlayer.id);
-            }
-
-            saveStorage();
-            closePlayerModal();
-        }
-
-        function deletePlayer(id) {
-            if(!currentUser) return;
-            if (confirm("Supprimer ce joueur ?")) {
-                players = players.filter(p => p.id !== id);
-                selectedPresenceIds.delete(id);
-                saveStorage();
-            }
-        }
-
-        function populateSubDropdown() {
-            const select = document.getElementById('sub-game-player-id');
-            select.innerHTML = '';
-            const subs = players.filter(p => p.type === 'REMPLACANT');
-
-            if (subs.length === 0) {
-                select.innerHTML = `<option value="">Aucun remplaçant disponible</option>`;
-                return;
-            }
-
-            subs.forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s.id;
-                opt.innerText = `${s.name} (${s.position})`;
-                select.appendChild(opt);
-            });
-        }
-
-        function toggleSubGameFree(isFree) {
-            const amountInput = document.getElementById('sub-game-amount');
-            if (isFree) {
-                amountInput.dataset.prev = amountInput.value;
-                amountInput.value = 0;
-                amountInput.disabled = true;
-            } else {
-                amountInput.value = amountInput.dataset.prev || subRate;
-                amountInput.disabled = false;
-            }
-        }
-
-        function openSubGameModal() {
-            if(!currentUser) return;
-            populateSubDropdown();
-            document.getElementById('sub-game-form').reset();
-            document.getElementById('sub-game-amount').value = subRate;
-            document.getElementById('sub-game-amount').disabled = false;
-            document.getElementById('sub-game-free').checked = false;
-            document.getElementById('sub-game-date').value = new Date().toISOString().split('T')[0];
-            document.getElementById('sub-game-modal').classList.remove('hidden');
-        }
-
-        function openSubGameModalForPlayer(subId) {
-            openSubGameModal();
-            document.getElementById('sub-game-player-id').value = subId;
-        }
-
-        function openSubGameModalFromPlayer() {
-            const playerId = parseInt(document.getElementById('modal-player-id').value);
-            if(playerId) {
-                closePlayerModal();
-                openSubGameModalForPlayer(playerId);
-            }
-        }
-
-        function closeSubGameModal() {
-            document.getElementById('sub-game-modal').classList.add('hidden');
-        }
-
-        function saveSubGame(e) {
-            e.preventDefault();
-            if(!currentUser) return;
-
-            const subId = parseInt(document.getElementById('sub-game-player-id').value);
-            const date = document.getElementById('sub-game-date').value;
-            const isFree = document.getElementById('sub-game-free').checked;
-            const amount = isFree ? 0 : (parseFloat(document.getElementById('sub-game-amount').value) || 25);
-            const status = isFree ? 'PAYE' : document.getElementById('sub-game-status').value;
-            const method = isFree ? 'Gratuit / Ignoré' : document.getElementById('sub-game-method').value;
-
-            const player = players.find(p => p.id === subId);
-            if (player) {
-                if (!player.subGames) player.subGames = [];
-                player.subGames.push({ id: Date.now(), date, amount, status, method, isFree });
-                saveStorage();
-                closeSubGameModal();
-            }
-        }
-
-        function markSubGamePaid(subId, gameId) {
-            if(!currentUser) return;
-            const player = players.find(p => p.id === subId);
-            if (player && player.subGames) {
-                const game = player.subGames.find(g => g.id === gameId);
-                if (game) {
-                    game.status = 'PAYE';
-                    saveStorage();
-                }
-            }
-        }
-
-        function deleteSubGame(subId, gameId) {
-            if(!currentUser) return;
-            if (confirm("Supprimer cette partie ?")) {
-                const player = players.find(p => p.id === subId);
-                if (player && player.subGames) {
-                    player.subGames = player.subGames.filter(g => g.id !== gameId);
-                    saveStorage();
-                    if(!document.getElementById('player-modal').classList.contains('hidden')) {
-                        renderModalSubGamesList();
-                    }
-                }
-            }
-        }
-
-        Object.assign(window, {
-            switchTab, openLoginModal, closeLoginModal, handleLogin, logout,
-            checkOnlyRegulars, checkAll, generateTeams, movePlayer, copyLineupText,
-            renderPlayersTable, resetDefaultPlayers, openPlayerModal, closePlayerModal,
-            toggleModalFieldsByType, savePlayer, deletePlayer, updateSeasonCost,
-            updateSubCost, openSubGameModal, openSubGameModalForPlayer,
-            openSubGameModalFromPlayer, closeSubGameModal, saveSubGame,
-            markSubGamePaid, deleteSubGame, togglePresence, openAddUserModal,
-            closeUserModal, saveUser, deleteUserEmail,
-            toggleHideRatings, takeTeamsSnapshot, toggleSubGameFree, manualSaveLineup,
-            loadHistoricalLineup, restoreCurrentActiveLineup
-        });
-    </script>
-</body>
-</html>
