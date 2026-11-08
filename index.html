@@ -1,43 +1,74 @@
-function takeTeamsSnapshot() {
-    const container = document.getElementById('teams-capture-container');
-    const btn = event.currentTarget;
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Génération...`;
-    btn.disabled = true;
+<!-- ... existing code ... -->
+            <div class="flex justify-between items-center pt-3 border-t border-slate-100">
+                <div class="flex gap-2">
+                    <button onclick="loadHistoricalLineupToMain()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg text-xs shadow">
+                        Charger sur le tableau principal
+                    </button>
+                    <button onclick="deleteHistoricalLineup()" class="admin-only px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs">
+                        <i class="fa-solid fa-trash mr-1"></i> Supprimer
+                    </button>
+                </div>
+                <button onclick="closeHistoryModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs">
+                    Fermer
+                </button>
+            </div>
+<!-- ... existing code ... -->
+        async function deleteHistoricalLineup(id) {
+            const archiveId = id || (selectedArchive ? selectedArchive.id : null);
+            if(!currentUser || !archiveId) return;
+            if(confirm("Voulez-vous vraiment supprimer cet alignement publié ?")) {
+                lineupHistory = lineupHistory.filter(h => h.id != archiveId);
+                await saveStorage();
+                renderHistoryDropdown();
+                closeHistoryModal();
+            }
+        }
 
-    // 1. Masquer temporairement les cotes le temps du rendu html2canvas
-    const wasHidden = document.body.classList.contains('hide-ratings');
-    if (!wasHidden) {
-        document.body.classList.add('hide-ratings');
-    }
+        function loadHistoricalLineup(id) {
+<!-- ... existing code ... -->
+        function takeTeamsSnapshot() {
+            const container = document.getElementById('teams-capture-container');
+            const btn = event.currentTarget;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Génération...`;
+            btn.disabled = true;
 
-    html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#f1f5f9' }).then(canvas => {
-        canvas.toBlob(blob => {
-            const item = new ClipboardItem({ "image/png": blob });
-            navigator.clipboard.write([item]).then(() => {
-                alert("📸 Photo copiée dans le presse-papier ! Prête à coller sur Facebook.");
-            }).catch(() => {
-                const link = document.createElement('a');
-                link.download = `alignement-${new Date().toISOString().split('T')[0]}.png`;
-                link.href = canvas.toDataURL();
-                link.click();
-                alert("📸 Image téléchargée sur votre appareil !");
-            });
-
-            // 2. Rétablir l'affichage normal des cotes à l'écran
+            // Masquer temporairement les cotes sur le body si elles étaient affichées
+            const wasHidden = document.body.classList.contains('hide-ratings');
             if (!wasHidden) {
-                document.body.classList.remove('hide-ratings');
+                document.body.classList.add('hide-ratings');
             }
 
-            btn.innerHTML = originalHTML;
-            btn.disabled = false;
-        });
-    }).catch(err => {
-        console.error(err);
-        if (!wasHidden) {
-            document.body.classList.remove('hide-ratings');
+            html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#f1f5f9' }).then(canvas => {
+                canvas.toBlob(blob => {
+                    const item = new ClipboardItem({ "image/png": blob });
+                    navigator.clipboard.write([item]).then(() => {
+                        alert("📸 Photo copiée dans le presse-papier ! Prête à coller sur Facebook.");
+                    }).catch(() => {
+                        const link = document.createElement('a');
+                        link.download = `alignement-${new Date().toISOString().split('T')[0]}.png`;
+                        link.href = canvas.toDataURL();
+                        link.click();
+                        alert("📸 Image téléchargée sur votre appareil !");
+                    });
+
+                    // Rétablir l'état initial des cotes
+                    if (!wasHidden) {
+                        document.body.classList.remove('hide-ratings');
+                    }
+
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                });
+            }).catch(err => {
+                console.error(err);
+                if (!wasHidden) {
+                    document.body.classList.remove('hide-ratings');
+                }
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            });
         }
-        btn.innerHTML = originalHTML;
-        btn.disabled = false;
-    });
-}
+
+        function getCurrentUserRole() {
+<!-- ... existing code ... -->
