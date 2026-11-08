@@ -1658,15 +1658,26 @@
         }
 
         function copyLineupText() {
-            let text = `🏒 *ALIGNEMENT DE LA SEMAINE* 🏒\n\n`;
-            text += `⚪ *ÉQUIPE BLANC*\n`;
-            text += `G: ${currentLineup.blanc.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `DEF: ${currentLineup.blanc.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `ATT: ${currentLineup.blanc.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n\n`;
-            text += `🎨 *ÉQUIPE MULTICOLORE*\n`;
-            text += `G: ${currentLineup.multicolore.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `DEF: ${currentLineup.multicolore.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `ATT: ${currentLineup.multicolore.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            let text = `🏒 *ALIGNEMENT DE LA SEMAINE* 🏒
+
+`;
+            text += `⚪ *ÉQUIPE BLANC*
+`;
+            text += `G: ${currentLineup.blanc.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}
+`;
+            text += `DEF: ${currentLineup.blanc.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}
+`;
+            text += `ATT: ${currentLineup.blanc.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}
+
+`;
+            text += `🎨 *ÉQUIPE MULTICOLORE*
+`;
+            text += `G: ${currentLineup.multicolore.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}
+`;
+            text += `DEF: ${currentLineup.multicolore.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}
+`;
+            text += `ATT: ${currentLineup.multicolore.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}
+`;
 
             navigator.clipboard.writeText(text);
             alert("Alignement copié dans le presse-papier !");
@@ -1914,15 +1925,41 @@
             if (player && player.subGames && player.subGames.length > 0) {
                 player.subGames.forEach(g => {
                     const div = document.createElement('div');
-                    div.className = "flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200";
+                    div.className = "flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200 gap-2";
+                    
+                    let statusToggleBtn = '';
+                    if (g.isFree) {
+                        statusToggleBtn = `<span class="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">Gratuite (0$)</span>`;
+                    } else if (g.status === 'PAYE') {
+                        statusToggleBtn = `<button type="button" onclick="toggleSubGameStatus(${player.id}, ${g.id})" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold hover:bg-emerald-200 transition-colors">✓ Payé (${g.amount}$)</button>`;
+                    } else {
+                        statusToggleBtn = `<button type="button" onclick="toggleSubGameStatus(${player.id}, ${g.id})" class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold hover:bg-rose-200 transition-colors">Impayé (${g.amount}$) - Cliquer pour payer</button>`;
+                    }
+
                     div.innerHTML = `
-                        <span>${g.date} - <b>${g.isFree ? 'Gratuite (0$)' : g.amount + '$'}</b> (${g.status === 'PAYE' ? 'Payé' : 'Impayé'})</span>
+                        <div class="flex items-center gap-2 truncate">
+                            <span class="font-semibold">${g.date}</span>
+                            ${statusToggleBtn}
+                        </div>
                         <button type="button" onclick="deleteSubGame(${player.id}, ${g.id})" class="text-rose-600 font-bold hover:underline">Supprimer</button>
                     `;
                     container.appendChild(div);
                 });
             } else {
                 container.innerHTML = `<p class="text-slate-400 italic">Aucune partie enregistrée</p>`;
+            }
+        }
+
+        function toggleSubGameStatus(subId, gameId) {
+            if(!currentUser) return;
+            const player = players.find(p => p.id === subId);
+            if (player && player.subGames) {
+                const game = player.subGames.find(g => g.id === gameId);
+                if (game) {
+                    game.status = (game.status === 'PAYE') ? 'NON_PAYE' : 'PAYE';
+                    saveStorage();
+                    renderModalSubGamesList();
+                }
             }
         }
 
@@ -2128,6 +2165,7 @@
         window.loadHistoricalLineupToMain = loadHistoricalLineupToMain;
         window.quickAddSubGameFromHistory = quickAddSubGameFromHistory;
         window.restoreCurrentActiveLineup = restoreCurrentActiveLineup;
+        window.toggleSubGameStatus = toggleSubGameStatus;
     </script>
 </body>
 </html>
