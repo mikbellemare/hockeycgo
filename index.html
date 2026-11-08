@@ -1183,6 +1183,9 @@
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Génération...`;
             btn.disabled = true;
 
+            const wasHidden = document.body.classList.contains('hide-ratings');
+            document.body.classList.add('hide-ratings');
+
             html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#f1f5f9' }).then(canvas => {
                 canvas.toBlob(blob => {
                     const item = new ClipboardItem({ "image/png": blob });
@@ -1195,11 +1198,17 @@
                         link.click();
                         alert("📸 Image téléchargée sur votre appareil !");
                     });
+                    if (!wasHidden) {
+                        document.body.classList.remove('hide-ratings');
+                    }
                     btn.innerHTML = originalHTML;
                     btn.disabled = false;
                 });
             }).catch(err => {
                 console.error(err);
+                if (!wasHidden) {
+                    document.body.classList.remove('hide-ratings');
+                }
                 btn.innerHTML = originalHTML;
                 btn.disabled = false;
             });
