@@ -104,8 +104,8 @@
                         <button onclick="checkAll(false)" class="admin-only px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700">
                             <i class="fa-solid fa-xmark mr-1"></i> Tout décocher
                         </button>
-                        <button onclick="manualSaveLineup()" id="btn-save-lineup" class="admin-only px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all flex items-center gap-1.5 text-xs">
-                            <i class="fa-solid fa-floppy-disk"></i> Sauvegarder
+                        <button onclick="publishLineup()" id="btn-save-lineup" class="admin-only px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all flex items-center gap-1.5 text-xs">
+                            <i class="fa-solid fa-bullhorn"></i> Publier l'alignement
                         </button>
                         <button onclick="generateTeams()" class="admin-only px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl font-bold shadow-md transition-all flex items-center gap-2">
                             <i class="fa-solid fa-shuffle"></i> Mélanger & Équilibrer
@@ -137,13 +137,13 @@
                     <div class="flex items-center gap-2">
                         <i class="fa-solid fa-clock-rotate-left text-cyan-600 text-lg"></i>
                         <div>
-                            <h3 class="text-sm font-bold text-slate-800">Historique des alignements précédents</h3>
-                            <p class="text-[11px] text-slate-500">Consultez les alignements et vérifiez les paiements des remplaçants par partie.</p>
+                            <h3 class="text-sm font-bold text-slate-800">Historique des alignements publiés</h3>
+                            <p class="text-[11px] text-slate-500">Consultez les alignements officiels et vérifiez les paiements des remplaçants par partie.</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2 w-full sm:w-auto">
                         <select id="history-select" onchange="loadHistoricalLineup(this.value)" class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-cyan-500 flex-1 sm:w-64">
-                            <option value="">-- Sélectionner une archive --</option>
+                            <option value="">-- Sélectionner un alignement publié --</option>
                         </select>
                         <button onclick="restoreCurrentActiveLineup()" id="btn-restore-current" class="hidden px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-300">
                             Voir Actuel
@@ -494,9 +494,14 @@
             </div>
 
             <div class="flex justify-between items-center pt-3 border-t border-slate-100">
-                <button onclick="loadHistoricalLineupToMain()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg text-xs shadow">
-                    Charger sur le tableau principal
-                </button>
+                <div class="flex gap-2">
+                    <button onclick="loadHistoricalLineupToMain()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg text-xs shadow">
+                        Charger sur le tableau principal
+                    </button>
+                    <button onclick="deleteHistoricalLineup(selectedArchive ? selectedArchive.id : null)" class="admin-only px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs">
+                        <i class="fa-solid fa-trash mr-1"></i> Supprimer
+                    </button>
+                </div>
                 <button onclick="closeHistoryModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs">
                     Fermer
                 </button>
@@ -896,11 +901,11 @@
             }
         }
 
-        async function manualSaveLineup() {
+        async function publishLineup() {
             if(!currentUser) return;
             const btn = document.getElementById('btn-save-lineup');
             const originalText = btn.innerHTML;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sauvegarde...`;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Publication...`;
             btn.disabled = true;
 
             try {
@@ -911,18 +916,20 @@
                 const archiveEntry = {
                     id: Date.now(),
                     dateISO: isoDate,
-                    dateLabel: `Alignement du ${nowStr}`,
+                    dateLabel: `Alignement publié du ${nowStr}`,
                     lineup: JSON.parse(JSON.stringify(currentLineup)),
-                    presences: Array.from(selectedPresenceIds)
+                    presences: Array.from(selectedPresenceIds),
+                    published: true
                 };
 
+                if (!lineupHistory) lineupHistory = [];
                 lineupHistory.unshift(archiveEntry);
-                if (lineupHistory.length > 15) lineupHistory.pop();
+                if (lineupHistory.length > 20) lineupHistory.pop();
 
                 await saveStorage();
                 renderHistoryDropdown();
 
-                btn.innerHTML = `<i class="fa-solid fa-check"></i> Enregistré & Archivé!`;
+                btn.innerHTML = `<i class="fa-solid fa-check"></i> Alignement publié !`;
                 btn.classList.replace('bg-emerald-600', 'bg-emerald-800');
                 setTimeout(() => {
                     btn.innerHTML = originalText;
@@ -930,8 +937,8 @@
                     btn.disabled = false;
                 }, 1500);
             } catch (error) {
-                console.error("Erreur lors de la sauvegarde :", error);
-                alert("Erreur lors de la sauvegarde dans la base de données.");
+                console.error("Erreur lors de la publication :", error);
+                alert("Erreur lors de la publication dans la base de données.");
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
@@ -941,14 +948,25 @@
             const select = document.getElementById('history-select');
             if(!select) return;
             
-            select.innerHTML = `<option value="">-- Inspecter une archive (${lineupHistory.length}) --</option>`;
+            const publishedList = (lineupHistory || []).filter(item => item.published);
+            select.innerHTML = `<option value="">-- Sélectionner un alignement publié (${publishedList.length}) --</option>`;
             
-            lineupHistory.forEach((item) => {
+            publishedList.forEach((item) => {
                 const opt = document.createElement('option');
                 opt.value = item.id;
                 opt.innerText = item.dateLabel;
                 select.appendChild(opt);
             });
+        }
+
+        async function deleteHistoricalLineup(id) {
+            if(!currentUser || !id) return;
+            if(confirm("Voulez-vous vraiment supprimer cet alignement publié ?")) {
+                lineupHistory = lineupHistory.filter(h => h.id != id);
+                await saveStorage();
+                renderHistoryDropdown();
+                closeHistoryModal();
+            }
         }
 
         function loadHistoricalLineup(id) {
@@ -1555,19 +1573,6 @@
             }
 
             currentLineup = { blanc: teamBlanc, multicolore: teamMulticolore };
-            
-            const now = new Date();
-            const isoDate = now.toISOString().split('T')[0];
-            const nowStr = now.toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' });
-
-            lineupHistory.unshift({
-                id: Date.now(),
-                dateISO: isoDate,
-                dateLabel: `Alignement généré du ${nowStr}`,
-                lineup: JSON.parse(JSON.stringify(currentLineup)),
-                presences: Array.from(selectedPresenceIds)
-            });
-            if (lineupHistory.length > 15) lineupHistory.pop();
 
             saveStorage();
             renderTeams();
@@ -2115,7 +2120,8 @@
         window.toggleHideRatings = toggleHideRatings;
         window.takeTeamsSnapshot = takeTeamsSnapshot;
         window.toggleSubGameFree = toggleSubGameFree;
-        window.manualSaveLineup = manualSaveLineup;
+        window.publishLineup = publishLineup;
+        window.deleteHistoricalLineup = deleteHistoricalLineup;
         window.loadHistoricalLineup = loadHistoricalLineup;
         window.openHistoryModal = openHistoryModal;
         window.closeHistoryModal = closeHistoryModal;
