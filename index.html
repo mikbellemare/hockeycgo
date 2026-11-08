@@ -744,6 +744,35 @@
         </div>
     </div>
 
+    
+    <!-- ================= MODAL D'ÉCHANGE / REMPLACEMENT DE JOUEUR DANS L'ALIGNEMENT ================= -->
+    <div id="swap-player-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-arrows-rotate text-cyan-600"></i> Remplacer un joueur
+                </h3>
+                <button onclick="closeSwapPlayerModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div id="swap-player-info" class="p-3 bg-cyan-50 border border-cyan-100 rounded-xl text-xs text-cyan-900">
+                <!-- Info du joueur sélectionné -->
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Remplacer par :</label>
+                <select id="swap-replacement-select" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                    <!-- Options de remplaçants et absents -->
+                </select>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeSwapPlayerModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Annuler</button>
+                <button type="button" onclick="confirmPlayerSwap()" class="px-4 py-2 text-sm font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg shadow">Confirmer le remplacement</button>
+            </div>
+        </div>
+    </div>
+
     <!-- SCRIPT FIREBASE ET APPLICATION -->
     <script type="module">
         import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -1633,7 +1662,15 @@
 
                     item.innerHTML = `
                         <div class="flex items-center gap-2">
-                            <span class="font-semibold text-slate-700">${p.name} ${p.type === 'REMPLACANT' ? '<span class="text-[10px] text-amber-600 font-bold">(Sub)</span>' : ''}</span>
+                            ${currentUser ? `
+                                <button onclick="openSwapPlayerModal(${p.id}, '${currentTeamName}')" class="font-semibold text-slate-700 hover:text-cyan-600 hover:underline text-left flex items-center gap-1.5" title="Cliquer pour remplacer ce joueur">
+                                    <span>${p.name}</span>
+                                    ${p.type === 'REMPLACANT' ? '<span class="text-[10px] text-amber-600 font-bold">(Sub)</span>' : ''}
+                                    <i class="fa-solid fa-arrows-rotate text-[10px] text-slate-400 group-hover:text-cyan-600"></i>
+                                </button>
+                            ` : `
+                                <span class="font-semibold text-slate-700">${p.name} ${p.type === 'REMPLACANT' ? '<span class="text-[10px] text-amber-600 font-bold">(Sub)</span>' : ''}</span>
+                            `}
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[11px] team-player-rating">${p.cote}/10</span>
@@ -2202,6 +2239,87 @@
                 }
             }
         }
+
+        
+        let selectedSwapPlayer = null;
+        let selectedSwapTeam = null;
+
+        function openSwapPlayerModal(playerId, teamName) {
+            if (!currentUser) return;
+            const player = players.find(p => p.id === playerId);
+            if (!player) return;
+
+            selectedSwapPlayer = player;
+            selectedSwapTeam = teamName;
+
+            const infoDiv = document.getElementById('swap-player-info');
+            infoDiv.innerHTML = `Joueur à remplacer dans l'équipe <b>${teamName === 'blanc' ? 'Blanc' : 'Multicolore'}</b> : <br><b class="text-sm">${player.name}</b> (${player.position} - Cote: ${player.cote})`;
+
+            const select = document.getElementById('swap-replacement-select');
+            select.innerHTML = '';
+
+            const lineupIds = new Set([
+                ...(currentLineup.blanc || []).map(p => p.id),
+                ...(currentLineup.multicolore || []).map(p => p.id)
+            ]);
+
+            const availableCandidates = players.filter(p => !lineupIds.has(p.id));
+
+            availableCandidates.sort((a, b) => {
+                if (a.position === player.position && b.position !== player.position) return -1;
+                if (a.position !== player.position && b.position === player.position) return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+            if (availableCandidates.length === 0) {
+                select.innerHTML = `<option value="">Aucun autre joueur disponible</option>`;
+            } else {
+                availableCandidates.forEach(cand => {
+                    const opt = document.createElement('option');
+                    opt.value = cand.id;
+                    const samePosTag = cand.position === player.position ? '★ ' : '';
+                    const subTag = cand.type === 'REMPLACANT' ? ' (Sub)' : '';
+                    opt.innerText = `${samePosTag}${cand.name}${subTag} - ${cand.position} (${cand.cote}/10)`;
+                    select.appendChild(opt);
+                });
+            }
+
+            document.getElementById('swap-player-modal').classList.remove('hidden');
+        }
+
+        function closeSwapPlayerModal() {
+            document.getElementById('swap-player-modal').classList.add('hidden');
+            selectedSwapPlayer = null;
+            selectedSwapTeam = null;
+        }
+
+        function confirmPlayerSwap() {
+            if (!currentUser || !selectedSwapPlayer || !selectedSwapTeam) return;
+
+            const replacementId = parseInt(document.getElementById('swap-replacement-select').value);
+            if (!replacementId) return;
+
+            const replacementPlayer = players.find(p => p.id === replacementId);
+            if (!replacementPlayer) return;
+
+            const teamList = currentLineup[selectedSwapTeam];
+            const pIdx = teamList.findIndex(p => p.id === selectedSwapPlayer.id);
+            if (pIdx !== -1) {
+                teamList.splice(pIdx, 1, replacementPlayer);
+            }
+
+            selectedPresenceIds.delete(selectedSwapPlayer.id);
+            selectedPresenceIds.add(replacementPlayer.id);
+
+            saveStorage();
+            renderTeams();
+            renderPresenceSelector();
+            closeSwapPlayerModal();
+        }
+
+        window.openSwapPlayerModal = openSwapPlayerModal;
+        window.closeSwapPlayerModal = closeSwapPlayerModal;
+        window.confirmPlayerSwap = confirmPlayerSwap;
 
         // EXPOSITION GLOBALE POUR LES ÉVÉNEMENTS ONCLICK DU HTML
         window.switchTab = switchTab;
