@@ -88,7 +88,7 @@
                         <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
                             <i class="fa-solid fa-dice text-cyan-600"></i> Générateur d'Équipes Équilibré
                         </h2>
-                        <p class="text-sm text-slate-500">Sélectionnez les joueurs présents, puis cliquez sur Mélanger. Ajustez les équipes manuellement si nécessaire.</p>
+                        <p class="text-sm text-slate-500">Sélectionnez les joueurs présents (sauvegardé en temps réel), puis cliquez sur Mélanger.</p>
                     </div>
 
                     <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
@@ -127,6 +127,27 @@
 
                     <div id="presence-categories-container" class="space-y-4 max-h-96 overflow-y-auto pr-1">
                         <!-- Généré dynamiquement en JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bloc d'historique des alignements des semaines précédentes -->
+            <div class="bg-white rounded-2xl shadow-sm p-4 border border-slate-200">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left text-cyan-600 text-lg"></i>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-800">Historique des alignements précédents</h3>
+                            <p class="text-[11px] text-slate-500">Consultez les alignements et présences des semaines antérieures enregistrées.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <select id="history-select" onchange="loadHistoricalLineup(this.value)" class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-cyan-500 flex-1 sm:w-64">
+                            <option value="">-- Sélectionner une archive --</option>
+                        </select>
+                        <button onclick="restoreCurrentActiveLineup()" id="btn-restore-current" class="hidden px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-300">
+                            Voir Actuel
+                        </button>
                     </div>
                 </div>
             </div>
@@ -735,9 +756,11 @@
         let subRate = 25;
         let selectedPresenceIds = new Set();
         let currentLineup = { blanc: [], multicolore: [] };
+        let lineupHistory = []; // Historique des alignements précédents
 
         const leagueDocRef = doc(db, "ligue", "data");
         let unsubscribeFirestore = null;
+        let isInitialLoad = true;
 
         function initFirebaseSync() {
             if (unsubscribeFirestore) unsubscribeFirestore();
@@ -759,28 +782,39 @@
                     if (data.currentLineup && data.currentLineup.blanc && data.currentLineup.multicolore) {
                         currentLineup = data.currentLineup;
                     }
+
+                    if (data.lineupHistory && Array.isArray(data.lineupHistory)) {
+                        lineupHistory = data.lineupHistory;
+                    }
+
+                    // Charger les présences sauvegardées dans Firestore si présentes
+                    if (isInitialLoad) {
+                        if (data.selectedPresenceIds && Array.isArray(data.selectedPresenceIds)) {
+                            selectedPresenceIds = new Set(data.selectedPresenceIds);
+                        } else {
+                            players.forEach(p => { if(p.type === 'REGULIER') selectedPresenceIds.add(p.id); });
+                        }
+                        isInitialLoad = false;
+                    }
                 } else {
                     players = [...OFFICIAL_24_PLAYERS];
                     userRoleMap = { "mbellemare@hockeycgo.local": "ADMIN" };
                     seasonCost = 592;
                     subRate = 25;
+                    players.forEach(p => { if(p.type === 'REGULIER') selectedPresenceIds.add(p.id); });
                     saveStorage();
                 }
 
                 document.getElementById('season-cost-input').value = seasonCost;
                 document.getElementById('sub-cost-input').value = subRate;
 
-                if (selectedPresenceIds.size === 0) {
-                    checkOnlyRegulars();
-                } else {
-                    renderPresenceSelector();
-                }
-
+                renderPresenceSelector();
                 renderPlayersTable();
                 renderFinanceTable();
                 renderSubFinanceTable();
                 renderUsersTable();
                 updateFinanceStats();
+                renderHistoryDropdown();
                 
                 if (!currentLineup.blanc.length && !currentLineup.multicolore.length) {
                     generateTeams();
@@ -801,8 +835,10 @@
                     userRoles: userRoleMap,
                     seasonCost: seasonCost,
                     subRate: subRate,
-                    currentLineup: currentLineup
-                });
+                    currentLineup: currentLineup,
+                    selectedPresenceIds: Array.from(selectedPresenceIds),
+                    lineupHistory: lineupHistory
+                }, { merge: true });
             } catch (error) {
                 console.error("Erreur lors de la sauvegarde Firebase :", error);
             }
@@ -816,8 +852,23 @@
             btn.disabled = true;
 
             try {
+                // Ajouter l'état actuel à l'historique lors d'une sauvegarde manuelle
+                const nowStr = new Date().toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' });
+                const archiveEntry = {
+                    id: Date.now(),
+                    dateLabel: `Alignement du ${nowStr}`,
+                    lineup: JSON.parse(JSON.stringify(currentLineup)),
+                    presences: Array.from(selectedPresenceIds)
+                };
+
+                // Éviter les doublons exacts récents, garder max 10 archives
+                lineupHistory.unshift(archiveEntry);
+                if (lineupHistory.length > 10) lineupHistory.pop();
+
                 await saveStorage();
-                btn.innerHTML = `<i class="fa-solid fa-check"></i> Enregistré!`;
+                renderHistoryDropdown();
+
+                btn.innerHTML = `<i class="fa-solid fa-check"></i> Enregistré & Archivé!`;
                 btn.classList.replace('bg-emerald-600', 'bg-emerald-800');
                 setTimeout(() => {
                     btn.innerHTML = originalText;
@@ -832,17 +883,46 @@
             }
         }
 
+        function renderHistoryDropdown() {
+            const select = document.getElementById('history-select');
+            if(!select) return;
+            
+            // Conserver l'option par défaut
+            select.innerHTML = `<option value="">-- Historique des semaines précédentes (${lineupHistory.length}) --</option>`;
+            
+            lineupHistory.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.innerText = item.dateLabel;
+                select.appendChild(opt);
+            });
+        }
+
+        function loadHistoricalLineup(id) {
+            if (!id) return;
+            const archive = lineupHistory.find(h => h.id == id);
+            if (!archive) return;
+
+            // Afficher temporairement l'alignement archivé
+            currentLineup = archive.lineup;
+            renderTeams();
+
+            // Afficher le bouton pour revenir à l'actuel
+            document.getElementById('btn-restore-current').classList.remove('hidden');
+        }
+
+        function restoreCurrentActiveLineup() {
+            document.getElementById('history-select').value = "";
+            document.getElementById('btn-restore-current').classList.add('hidden');
+            // Recharger depuis Firestore en forçant l'affichage de l'actuel
+            initFirebaseSync();
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             onAuthStateChanged(auth, (user) => {
                 currentUser = user;
                 applyPermissionUI();
                 initFirebaseSync();
-                renderPresenceSelector();
-                renderPlayersTable();
-                renderFinanceTable();
-                renderSubFinanceTable();
-                renderUsersTable();
-                renderTeams();
             });
         });
 
@@ -1141,6 +1221,7 @@
                 if(p.type === 'REGULIER') selectedPresenceIds.add(p.id);
             });
             renderPresenceSelector();
+            saveStorage(); // Sauvegarde immédiate
         }
 
         function switchTab(tab) {
@@ -1242,6 +1323,7 @@
             if (selectedPresenceIds.has(id)) selectedPresenceIds.delete(id);
             else selectedPresenceIds.add(id);
             renderPresenceSelector();
+            saveStorage(); // Sauvegarde immédiate lors du cochage/décochage des joueurs et remplaçants
         }
 
         function checkAll(status) {
@@ -1249,12 +1331,12 @@
             if (status) players.forEach(p => selectedPresenceIds.add(p.id));
             else selectedPresenceIds.clear();
             renderPresenceSelector();
+            saveStorage(); // Sauvegarde immédiate
         }
 
         function generateTeams() {
             const activePlayers = players.filter(p => selectedPresenceIds.has(p.id));
             
-            // Mélanger légèrement pour la variété à cote égale, puis trier par cote décroissante
             const gardiens = shuffleArray(activePlayers.filter(p => p.position === 'Gardien')).sort((a,b) => b.cote - a.cote);
             const defenseurs = shuffleArray(activePlayers.filter(p => p.position === 'Défenseur')).sort((a,b) => b.cote - a.cote);
             const attaquants = shuffleArray(activePlayers.filter(p => p.position === 'Attaquant')).sort((a,b) => b.cote - a.cote);
@@ -1262,7 +1344,6 @@
             const teamBlanc = [];
             const teamMulticolore = [];
 
-            // 1. Distribution équitable des Gardiens
             let randFlip = Math.random() < 0.5;
             gardiens.forEach(g => {
                 if (randFlip) teamBlanc.push(g);
@@ -1270,10 +1351,8 @@
                 randFlip = !randFlip;
             });
 
-            // Fonctions utilitaires pour suivre la force cumulée
             const getSumCote = (arr) => arr.reduce((acc, p) => acc + (p.cote || 0), 0);
 
-            // 2. Équilibrage équitable des Défenseurs par paire (Snake Draft & adaptation selon la cote cumulée)
             for (let i = 0; i < defenseurs.length; i += 2) {
                 const pair = defenseurs.slice(i, i + 2);
                 const sumBlanc = getSumCote(teamBlanc);
@@ -1293,7 +1372,6 @@
                 }
             }
 
-            // 3. Équilibrage équitable des Attaquants par paire (Snake Draft & adaptation selon la cote cumulée)
             for (let i = 0; i < attaquants.length; i += 2) {
                 const pair = attaquants.slice(i, i + 2);
                 const sumBlanc = getSumCote(teamBlanc);
@@ -1314,8 +1392,20 @@
             }
 
             currentLineup = { blanc: teamBlanc, multicolore: teamMulticolore };
+            
+            // Archiver automatiquement dans l'historique lors de la génération
+            const nowStr = new Date().toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' });
+            lineupHistory.unshift({
+                id: Date.now(),
+                dateLabel: `Alignement généré du ${nowStr}`,
+                lineup: JSON.parse(JSON.stringify(currentLineup)),
+                presences: Array.from(selectedPresenceIds)
+            });
+            if (lineupHistory.length > 10) lineupHistory.pop();
+
             saveStorage();
             renderTeams();
+            renderHistoryDropdown();
         }
 
         function movePlayer(playerId, fromTeam, toTeam) {
@@ -1381,7 +1471,6 @@
             renderPosGroup(currentLineup.multicolore, 'Défenseur', 'team-multicolore-d', 'multicolore', 'blanc');
             renderPosGroup(currentLineup.multicolore, 'Attaquant', 'team-multicolore-a', 'multicolore', 'blanc');
 
-            // Calculer et afficher les cotes moyennes
             const calcAvg = (teamList) => {
                 if (!teamList || teamList.length === 0) return '0.0';
                 const total = teamList.reduce((acc, p) => acc + (p.cote || 0), 0);
@@ -1834,7 +1923,8 @@
             openSubGameModalFromPlayer, closeSubGameModal, saveSubGame,
             markSubGamePaid, deleteSubGame, togglePresence, openAddUserModal,
             closeUserModal, saveUser, deleteUserEmail,
-            toggleHideRatings, takeTeamsSnapshot, toggleSubGameFree, manualSaveLineup
+            toggleHideRatings, takeTeamsSnapshot, toggleSubGameFree, manualSaveLineup,
+            loadHistoricalLineup, restoreCurrentActiveLineup
         });
     </script>
 </body>
