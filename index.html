@@ -804,8 +804,8 @@
         let subRate = 25;
         let selectedPresenceIds = new Set();
         let currentLineup = { blanc: [], multicolore: [] };
-        let lineupHistory = []; // Historique des alignements précédents
-        let selectedArchive = null; // Archive sélectionnée courante
+        let lineupHistory = []; 
+        let selectedArchive = null; 
 
         const leagueDocRef = doc(db, "ligue", "data");
         let unsubscribeFirestore = null;
@@ -836,7 +836,6 @@
                         lineupHistory = data.lineupHistory;
                     }
 
-                    // Charger les présences sauvegardées dans Firestore si présentes
                     if (isInitialLoad) {
                         if (data.selectedPresenceIds && Array.isArray(data.selectedPresenceIds)) {
                             selectedPresenceIds = new Set(data.selectedPresenceIds);
@@ -873,7 +872,6 @@
                 
                 applyPermissionUI();
 
-                // Si la fenêtre d'historique est ouverte, rafraîchir son contenu
                 if (!document.getElementById('history-modal').classList.contains('hidden') && selectedArchive) {
                     openHistoryModal(selectedArchive.id);
                 }
@@ -965,10 +963,7 @@
 
             document.getElementById('history-modal-title').innerText = archive.dateLabel;
 
-            // Extraire tous les joueurs et remplaçants de l'archive
             const allArchivePlayers = [...(archive.lineup.blanc || []), ...(archive.lineup.multicolore || [])];
-            
-            // Trouver les remplaçants présents ce soir-là
             const subPresenceList = [];
             allArchivePlayers.forEach(pArchive => {
                 const actualPlayer = players.find(p => p.id === pArchive.id);
@@ -987,7 +982,6 @@
 
                 subPresenceList.forEach(sub => {
                     const games = sub.subGames || [];
-                    // Chercher si la partie a été enregistrée pour ce jour
                     const matchGame = games.find(g => g.date === archiveDate);
 
                     const div = document.createElement('div');
@@ -1027,7 +1021,6 @@
                 });
             }
 
-            // Remplir les effectifs Blanc vs Multicolore
             const fillTeam = (teamList, containerId) => {
                 const c = document.getElementById(containerId);
                 c.innerHTML = '';
@@ -1664,3 +1657,471 @@
             text += `⚪ *ÉQUIPE BLANC*\n`;
             text += `G: ${currentLineup.blanc.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
             text += `DEF: ${currentLineup.blanc.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            text += `ATT: ${currentLineup.blanc.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n\n`;
+            text += `🎨 *ÉQUIPE MULTICOLORE*\n`;
+            text += `G: ${currentLineup.multicolore.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            text += `DEF: ${currentLineup.multicolore.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            text += `ATT: ${currentLineup.multicolore.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+
+            navigator.clipboard.writeText(text);
+            alert("Alignement copié dans le presse-papier !");
+        }
+
+        function renderPlayersTable() {
+            const tbody = document.getElementById('players-table-body');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            const isAdmin = (getCurrentUserRole() === 'ADMIN');
+            const statusColHeader = document.querySelector('.payment-status-col');
+            if(statusColHeader) {
+                if(isAdmin) statusColHeader.classList.remove('hidden');
+                else statusColHeader.classList.add('hidden');
+            }
+
+            const search = document.getElementById('search-player').value.toLowerCase();
+            const filterType = document.getElementById('filter-type').value;
+            const filterPos = document.getElementById('filter-position').value;
+
+            const filtered = players.filter(p => {
+                const matchSearch = p.name.toLowerCase().includes(search) || (currentUser && p.phone && p.phone.includes(search));
+                const matchType = filterType === 'ALL' || p.type === filterType;
+                const matchPos = filterPos === 'ALL' || p.position === filterPos;
+                return matchSearch && matchType && matchPos;
+            });
+
+            filtered.forEach((p, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors";
+
+                let statusBadge = '';
+                if (p.type === 'REGULIER') {
+                    const isPaid = p.paid >= seasonCost;
+                    const isPartial = p.paid > 0 && p.paid < seasonCost;
+                    if(isPaid) statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">Payé (${p.paid}$)</span>`;
+                    else if(isPartial) statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">Partiel (${p.paid}$)</span>`;
+                    else statusBadge = `<span class="px-2 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">Non payé</span>`;
+                } else {
+                    const games = (p.subGames || []).filter(g => !g.isFree);
+                    const unpaidGames = games.filter(g => g.status !== 'PAYE').length;
+                    if ((p.subGames || []).length === 0) statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">0 partie</span>`;
+                    else if (unpaidGames === 0) statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">À jour</span>`;
+                    else statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">${unpaidGames} impayée(s)</span>`;
+                }
+
+                const actionsHtml = currentUser ? `
+                    <button onclick="openPlayerModal(${p.id})" class="p-1.5 text-cyan-600 hover:text-cyan-800 hover:bg-cyan-50 rounded"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button onclick="deletePlayer(${p.id})" class="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded"><i class="fa-solid fa-trash"></i></button>
+                ` : `<span class="text-xs text-slate-400 italic">Lecture seule</span>`;
+
+                const phoneDisplay = currentUser ? (p.phone || '-') : '<span class="text-slate-400 italic">Connectez-vous</span>';
+
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-slate-400">${index + 1}</td>
+                    <td class="p-3 font-semibold text-slate-800">${p.name}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 rounded text-[11px] font-bold ${p.type === 'REGULIER' ? 'bg-cyan-100 text-cyan-800' : 'bg-amber-100 text-amber-800'}">${p.type === 'REGULIER' ? 'Régulier' : 'Remplaçant'}</span></td>
+                    <td class="p-3">${p.position}</td>
+                    <td class="p-3 font-bold text-slate-700 team-player-rating">${p.cote}/10</td>
+                    <td class="p-3 text-slate-500">${phoneDisplay}</td>
+                    ${isAdmin ? `<td class="p-3 payment-status-col">${statusBadge}</td>` : ''}
+                    <td class="p-3 text-right space-x-1">${actionsHtml}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderFinanceTable() {
+            const tbody = document.getElementById('finance-table-body');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+            const reguliers = players.filter(p => p.type === 'REGULIER');
+
+            reguliers.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors";
+                const solde = seasonCost - p.paid;
+                const isPartial = p.paid > 0 && p.paid < seasonCost;
+
+                let statusClass = "bg-emerald-100 text-emerald-800";
+                let statusLabel = "À jour";
+                if (isPartial) { statusClass = "bg-amber-100 text-amber-800"; statusLabel = "Incomplet"; }
+                if (p.paid === 0) { statusClass = "bg-rose-100 text-rose-800"; statusLabel = "En attente"; }
+
+                const actionBtn = (getCurrentUserRole() === 'ADMIN') ? `
+                    <button onclick="openPlayerModal(${p.id})" class="px-2.5 py-1 text-xs font-semibold bg-cyan-50 text-cyan-700 hover:bg-cyan-100 rounded">Paiement</button>
+                ` : `<span class="text-xs text-slate-400 italic">Accès restreint</span>`;
+
+                tr.innerHTML = `
+                    <td class="p-3 font-semibold text-slate-800">${p.name}</td>
+                    <td class="p-3 font-bold text-slate-800">${p.paid.toFixed(2)} $</td>
+                    <td class="p-3 font-semibold ${solde > 0 ? 'text-amber-600' : 'text-slate-400'}">${solde > 0 ? solde.toFixed(2) + ' $' : '0.00 $'}</td>
+                    <td class="p-3 text-xs text-slate-500">${p.date || '-'}</td>
+                    <td class="p-3 text-xs text-slate-600">${p.method || 'Non spécifié'}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 rounded text-[11px] font-bold ${statusClass}">${statusLabel}</span></td>
+                    <td class="p-3 text-right">${actionBtn}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderSubFinanceTable() {
+            const tbody = document.getElementById('sub-finance-table-body');
+            tbody.innerHTML = '';
+            const subs = players.filter(p => p.type === 'REMPLACANT');
+
+            if (subs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400 italic">Aucun remplaçant enregistré.</td></tr>`;
+                return;
+            }
+
+            subs.forEach(sub => {
+                const games = sub.subGames || [];
+                const paidOrUnpaidGames = games.filter(g => !g.isFree);
+                const totalDue = paidOrUnpaidGames.reduce((acc, g) => acc + g.amount, 0);
+                const totalPaid = paidOrUnpaidGames.filter(g => g.status === 'PAYE').reduce((acc, g) => acc + g.amount, 0);
+                const unpaid = totalDue - totalPaid;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-amber-50/50 transition-colors";
+
+                let gamesDetail = '';
+                if (games.length > 0) {
+                    gamesDetail = games.map(g => {
+                        let badgeHtml = '';
+                        if (g.isFree) badgeHtml = `<span class="text-indigo-600 font-bold bg-indigo-50 px-1 rounded">Gratuite (0$)</span>`;
+                        else if (g.status === 'PAYE') badgeHtml = `<span class="text-emerald-700 font-bold">✓ Payé</span>`;
+                        else badgeHtml = currentUser ? `<button onclick="markSubGamePaid(${sub.id}, ${g.id})" class="text-xs text-rose-600 font-bold underline">Régler</button>` : `<span class="text-xs text-rose-600 font-bold">Impayé</span>`;
+
+                        let deleteBtn = currentUser ? `<button onclick="deleteSubGame(${sub.id}, ${g.id})" class="text-slate-400 hover:text-rose-600 ml-1"><i class="fa-solid fa-xmark"></i></button>` : '';
+
+                        return `<div class="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[11px] mr-1 mb-1"><span>${g.date}</span> ${badgeHtml} ${deleteBtn}</div>`;
+                    }).join('');
+                } else {
+                    gamesDetail = `<span class="text-xs text-slate-400 italic">Aucune partie</span>`;
+                }
+
+                const actionBtn = currentUser ? `<button onclick="openSubGameModalForPlayer(${sub.id})" class="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 rounded">+ Partie</button>` : '';
+
+                tr.innerHTML = `
+                    <td class="p-3 font-semibold text-slate-800">${sub.name}</td>
+                    <td class="p-3 max-w-xs">${gamesDetail}</td>
+                    <td class="p-3 font-bold text-slate-800">${totalDue.toFixed(2)} $</td>
+                    <td class="p-3 font-bold text-emerald-700">${totalPaid.toFixed(2)} $</td>
+                    <td class="p-3 font-bold ${unpaid > 0 ? 'text-rose-600' : 'text-slate-400'}">${unpaid.toFixed(2)} $</td>
+                    <td class="p-3 text-right">${actionBtn}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateFinanceStats() {
+            const reguliers = players.filter(p => p.type === 'REGULIER');
+            const subs = players.filter(p => p.type === 'REMPLACANT');
+            const totalPercuReg = reguliers.reduce((acc, p) => acc + (p.paid || 0), 0);
+            
+            let totalPayableSubGamesCount = 0;
+            let totalPercuSubs = 0;
+            let totalImpayeSubs = 0;
+
+            subs.forEach(s => {
+                const games = (s.subGames || []).filter(g => !g.isFree);
+                totalPayableSubGamesCount += games.length;
+                games.forEach(g => {
+                    if (g.status === 'PAYE') totalPercuSubs += g.amount;
+                    else totalImpayeSubs += g.amount;
+                });
+            });
+
+            const totalPercuCombined = totalPercuReg + totalPercuSubs;
+            const totalAttenduReg = reguliers.length * seasonCost;
+            const soldeCollecterReg = Math.max(0, totalAttenduReg - totalPercuReg);
+            const totalCollecterCombined = soldeCollecterReg + totalImpayeSubs;
+            const countPayeReg = reguliers.filter(p => p.paid >= seasonCost).length;
+
+            document.getElementById('total-percu').innerText = totalPercuCombined.toLocaleString('fr-CA', { minimumFractionDigits: 2 }) + ' $';
+            document.getElementById('total-percu-subs').innerText = totalPercuSubs.toLocaleString('fr-CA', { minimumFractionDigits: 2 }) + ' $';
+            document.getElementById('total-a-collecter').innerText = totalCollecterCombined.toLocaleString('fr-CA', { minimumFractionDigits: 2 }) + ' $';
+            document.getElementById('total-impaye-subs').innerText = totalImpayeSubs.toLocaleString('fr-CA', { minimumFractionDigits: 2 }) + ' $';
+            document.getElementById('count-paye').innerText = countPayeReg;
+            document.getElementById('count-total-reg').innerText = reguliers.length;
+            document.getElementById('count-sub-games').innerText = totalPayableSubGamesCount;
+        }
+
+        function openPlayerModal(id = null) {
+            if(!currentUser) return;
+            const form = document.getElementById('player-form');
+            form.reset();
+
+            if (id) {
+                const player = players.find(p => p.id === id);
+                if (player) {
+                    document.getElementById('modal-title').innerText = "Éditer le Joueur";
+                    document.getElementById('modal-player-id').value = player.id;
+                    document.getElementById('modal-name').value = player.name;
+                    document.getElementById('modal-type').value = player.type;
+                    document.getElementById('modal-position').value = player.position;
+                    document.getElementById('modal-cote').value = player.cote;
+                    document.getElementById('modal-phone').value = player.phone || '';
+                    document.getElementById('modal-paid').value = player.paid || 0;
+                    document.getElementById('modal-pay-date').value = player.date || '';
+                    document.getElementById('modal-pay-method').value = player.method || 'Non spécifié';
+                }
+            } else {
+                document.getElementById('modal-title').innerText = "Nouveau Joueur";
+                document.getElementById('modal-player-id').value = '';
+                document.getElementById('modal-pay-date').value = new Date().toISOString().split('T')[0];
+            }
+
+            toggleModalFieldsByType();
+            document.getElementById('player-modal').classList.remove('hidden');
+        }
+
+        function closePlayerModal() {
+            document.getElementById('player-modal').classList.add('hidden');
+        }
+
+        function toggleModalFieldsByType() {
+            const type = document.getElementById('modal-type').value;
+            const regFields = document.getElementById('regular-payment-fields');
+            const subFields = document.getElementById('sub-history-fields');
+
+            if (type === 'REGULIER') {
+                regFields.classList.remove('hidden');
+                subFields.classList.add('hidden');
+            } else {
+                regFields.classList.add('hidden');
+                subFields.classList.remove('hidden');
+                renderModalSubGamesList();
+            }
+        }
+
+        function renderModalSubGamesList() {
+            const playerId = parseInt(document.getElementById('modal-player-id').value);
+            const container = document.getElementById('modal-sub-games-list');
+            container.innerHTML = '';
+
+            if (!playerId) {
+                container.innerHTML = `<p class="text-slate-400 italic">Enregistrez d'abord le remplaçant.</p>`;
+                return;
+            }
+
+            const player = players.find(p => p.id === playerId);
+            if (player && player.subGames && player.subGames.length > 0) {
+                player.subGames.forEach(g => {
+                    const div = document.createElement('div');
+                    div.className = "flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200";
+                    div.innerHTML = `
+                        <span>${g.date} - <b>${g.isFree ? 'Gratuite (0$)' : g.amount + '$'}</b> (${g.status === 'PAYE' ? 'Payé' : 'Impayé'})</span>
+                        <button type="button" onclick="deleteSubGame(${player.id}, ${g.id})" class="text-rose-600 font-bold hover:underline">Supprimer</button>
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                container.innerHTML = `<p class="text-slate-400 italic">Aucune partie enregistrée</p>`;
+            }
+        }
+
+        function savePlayer(e) {
+            e.preventDefault();
+            if(!currentUser) return;
+
+            const id = parseInt(document.getElementById('modal-player-id').value);
+            const name = document.getElementById('modal-name').value.trim();
+            const type = document.getElementById('modal-type').value;
+            const position = document.getElementById('modal-position').value;
+            const cote = parseFloat(document.getElementById('modal-cote').value) || 7.0;
+            const phone = document.getElementById('modal-phone').value.trim();
+            const paid = parseFloat(document.getElementById('modal-paid').value) || 0;
+            const date = document.getElementById('modal-pay-date').value;
+            const method = document.getElementById('modal-pay-method').value;
+            const isAdmin = (getCurrentUserRole() === 'ADMIN');
+
+            if (id) {
+                const p = players.find(x => x.id === id);
+                if (p) {
+                    p.name = name;
+                    p.type = type;
+                    p.position = position;
+                    p.cote = cote;
+                    p.phone = phone;
+                    if(type === 'REGULIER' && isAdmin) {
+                        p.paid = paid;
+                        p.date = date;
+                        p.method = method;
+                    }
+                }
+            } else {
+                const newPlayer = {
+                    id: Date.now(),
+                    name, type, position, cote, phone,
+                    paid: (type === 'REGULIER' && isAdmin) ? paid : 0,
+                    date: (type === 'REGULIER' && isAdmin) ? date : '',
+                    method: (type === 'REGULIER' && isAdmin) ? method : 'Non spécifié',
+                    subGames: []
+                };
+                players.push(newPlayer);
+                selectedPresenceIds.add(newPlayer.id);
+            }
+
+            saveStorage();
+            closePlayerModal();
+        }
+
+        function deletePlayer(id) {
+            if(!currentUser) return;
+            if (confirm("Supprimer ce joueur ?")) {
+                players = players.filter(p => p.id !== id);
+                selectedPresenceIds.delete(id);
+                saveStorage();
+            }
+        }
+
+        function populateSubDropdown() {
+            const select = document.getElementById('sub-game-player-id');
+            select.innerHTML = '';
+            const subs = players.filter(p => p.type === 'REMPLACANT');
+
+            if (subs.length === 0) {
+                select.innerHTML = `<option value="">Aucun remplaçant disponible</option>`;
+                return;
+            }
+
+            subs.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.innerText = `${s.name} (${s.position})`;
+                select.appendChild(opt);
+            });
+        }
+
+        function toggleSubGameFree(isFree) {
+            const amountInput = document.getElementById('sub-game-amount');
+            if (isFree) {
+                amountInput.dataset.prev = amountInput.value;
+                amountInput.value = 0;
+                amountInput.disabled = true;
+            } else {
+                amountInput.value = amountInput.dataset.prev || subRate;
+                amountInput.disabled = false;
+            }
+        }
+
+        function openSubGameModal() {
+            if(!currentUser) return;
+            populateSubDropdown();
+            document.getElementById('sub-game-form').reset();
+            document.getElementById('sub-game-amount').value = subRate;
+            document.getElementById('sub-game-amount').disabled = false;
+            document.getElementById('sub-game-free').checked = false;
+            document.getElementById('sub-game-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('sub-game-modal').classList.remove('hidden');
+        }
+
+        function openSubGameModalForPlayer(subId) {
+            openSubGameModal();
+            document.getElementById('sub-game-player-id').value = subId;
+        }
+
+        function openSubGameModalFromPlayer() {
+            const playerId = parseInt(document.getElementById('modal-player-id').value);
+            if(playerId) {
+                closePlayerModal();
+                openSubGameModalForPlayer(playerId);
+            }
+        }
+
+        function closeSubGameModal() {
+            document.getElementById('sub-game-modal').classList.add('hidden');
+        }
+
+        function saveSubGame(e) {
+            e.preventDefault();
+            if(!currentUser) return;
+
+            const subId = parseInt(document.getElementById('sub-game-player-id').value);
+            const date = document.getElementById('sub-game-date').value;
+            const isFree = document.getElementById('sub-game-free').checked;
+            const amount = isFree ? 0 : (parseFloat(document.getElementById('sub-game-amount').value) || 25);
+            const status = isFree ? 'PAYE' : document.getElementById('sub-game-status').value;
+            const method = isFree ? 'Gratuit / Ignoré' : document.getElementById('sub-game-method').value;
+
+            const player = players.find(p => p.id === subId);
+            if (player) {
+                if (!player.subGames) player.subGames = [];
+                player.subGames.push({ id: Date.now(), date, amount, status, method, isFree });
+                saveStorage();
+                closeSubGameModal();
+            }
+        }
+
+        function markSubGamePaid(subId, gameId) {
+            if(!currentUser) return;
+            const player = players.find(p => p.id === subId);
+            if (player && player.subGames) {
+                const game = player.subGames.find(g => g.id === gameId);
+                if (game) {
+                    game.status = 'PAYE';
+                    saveStorage();
+                }
+            }
+        }
+
+        function deleteSubGame(subId, gameId) {
+            if(!currentUser) return;
+            if (confirm("Supprimer cette partie ?")) {
+                const player = players.find(p => p.id === subId);
+                if (player && player.subGames) {
+                    player.subGames = player.subGames.filter(g => g.id !== gameId);
+                    saveStorage();
+                    if(!document.getElementById('player-modal').classList.contains('hidden')) {
+                        renderModalSubGamesList();
+                    }
+                }
+            }
+        }
+
+        // EXPOSITION GLOBALE POUR LES ÉVÉNEMENTS ONCLICK DU HTML
+        window.switchTab = switchTab;
+        window.openLoginModal = openLoginModal;
+        window.closeLoginModal = closeLoginModal;
+        window.handleLogin = handleLogin;
+        window.logout = logout;
+        window.checkOnlyRegulars = checkOnlyRegulars;
+        window.checkAll = checkAll;
+        window.generateTeams = generateTeams;
+        window.movePlayer = movePlayer;
+        window.copyLineupText = copyLineupText;
+        window.renderPlayersTable = renderPlayersTable;
+        window.resetDefaultPlayers = resetDefaultPlayers;
+        window.openPlayerModal = openPlayerModal;
+        window.closePlayerModal = closePlayerModal;
+        window.toggleModalFieldsByType = toggleModalFieldsByType;
+        window.savePlayer = savePlayer;
+        window.deletePlayer = deletePlayer;
+        window.updateSeasonCost = updateSeasonCost;
+        window.updateSubCost = updateSubCost;
+        window.openSubGameModal = openSubGameModal;
+        window.openSubGameModalForPlayer = openSubGameModalForPlayer;
+        window.openSubGameModalFromPlayer = openSubGameModalFromPlayer;
+        window.closeSubGameModal = closeSubGameModal;
+        window.saveSubGame = saveSubGame;
+        window.markSubGamePaid = markSubGamePaid;
+        window.deleteSubGame = deleteSubGame;
+        window.togglePresence = togglePresence;
+        window.openAddUserModal = openAddUserModal;
+        window.closeUserModal = closeUserModal;
+        window.saveUser = saveUser;
+        window.deleteUserEmail = deleteUserEmail;
+        window.toggleHideRatings = toggleHideRatings;
+        window.takeTeamsSnapshot = takeTeamsSnapshot;
+        window.toggleSubGameFree = toggleSubGameFree;
+        window.manualSaveLineup = manualSaveLineup;
+        window.loadHistoricalLineup = loadHistoricalLineup;
+        window.openHistoryModal = openHistoryModal;
+        window.closeHistoryModal = closeHistoryModal;
+        window.loadHistoricalLineupToMain = loadHistoricalLineupToMain;
+        window.quickAddSubGameFromHistory = quickAddSubGameFromHistory;
+        window.restoreCurrentActiveLineup = restoreCurrentActiveLineup;
+    </script>
+</body>
+</html>
