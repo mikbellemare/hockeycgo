@@ -1788,66 +1788,95 @@
             const allPlayers = [...blancList, ...multiList];
 
             // Choix du Joueur de la partie
-            // Privilégier les joueurs à cote plus élevée avec un facteur chance
             const weightedPlayers = [...winnerPlayers].sort((a,b) => (b.cote + Math.random()*2) - (a.cote + Math.random()*2));
             const starPlayer = weightedPlayers[0] || allPlayers[0];
 
-            // Raisons amusantes personnalisées
-            const reasons = [
-                `Inarrêtable en attaque avec un tour du chapeau spectaculaire !`,
-                `Un mur infranchissable devant son filet, sauvant la victoire en fin de 3e période.`,
-                `Des replis défensifs monstrueux et une passe décisive parfaite en prolongation !`,
-                `Inspiration pure : il a transporté l'équipe sur ses épaules du début à la fin.`,
-                `Un tir frappé foudroyant dans la lucarne pour sceller l'issue du match !`
-            ];
-            const starReason = reasons[Math.floor(Math.random() * reasons.length)];
+            // Raisons adaptées strictement à la position du joueur sélectionné
+            const reasonsByPosition = {
+                'Gardien': [
+                    `Un mur infranchissable devant son filet, sauvant la victoire avec des arrêts clés en 3e période !`,
+                    `Mitaine de voleur et sang-froid exemplaire : il a complètement frustré les attaquants adverses !`,
+                    `Performance digne d'un blanchissage, repoussant tir après tir dans les moments chauds !`
+                ],
+                'Défenseur': [
+                    `Des replis défensifs monstrueux, des tirs bloqués et une passe savante sur le but gagnant !`,
+                    `Un tir frappé foudroyant de la ligne bleue et une présence physique dominante en zone défensive !`,
+                    `Une relance impeccable et un contrôle parfait du tempo de la rencontre !`
+                ],
+                'Attaquant': [
+                    `Inarrêtable en attaque avec un tour du chapeau spectaculaire et une énergie débordante !`,
+                    `Vitesse explosive et feintes déroutantes : il a percé la défense adverse à plusieurs reprises !`,
+                    `Opportuniste hors pair avec le but de la victoire marqué sur un tir opportuniste !`
+                ]
+            };
+
+            const posReasons = reasonsByPosition[starPlayer.position] || reasonsByPosition['Attaquant'];
+            const starReason = posReasons[Math.floor(Math.random() * posReasons.length)];
 
             // Probabilité calculée
             const totalCote = avgBlanc + avgMulti;
             const winProb = Math.round((winnerTeam === 'BLANC' ? avgBlanc : avgMulti) / totalCote * 100);
 
+            // Textes d'analyse globale de la partie (2-3 lignes)
+            const matchAnalyses = [
+                `Selon notre modèle de simulation, ce duel s'annonce extrêmement rythmé. L'Équipe ${winnerTeam} devrait prendre l'avantage grâce à sa synergie collective et une efficacité redoutable sur les revirements.`,
+                `Une confrontation serrée où la profondeur des bancs fera toute la différence. L'Équipe ${winnerTeam} profitera d'une meilleure présence physique et de tirs de qualité en fin de match pour l'emporter.`,
+                `Un match très offensif en perspective ! L'Équipe ${winnerTeam} saura imposer son rythme dès le premier tiers-temps pour conserver l'avantage jusqu'au coup de sifflet final.`
+            ];
+            const matchSummaryText = matchAnalyses[Math.floor(Math.random() * matchAnalyses.length)];
+
             const resultContainer = document.getElementById('prediction-result-container');
             resultContainer.innerHTML = `
-                <div class="grid md:grid-cols-3 gap-4 items-center bg-slate-900/60 p-5 rounded-xl border border-slate-700/80">
-                    
-                    <!-- Score Prédit -->
-                    <div class="text-center md:border-r border-slate-700/80 md:pr-4">
-                        <span class="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 block mb-1">Score Prédit</span>
-                        <div class="text-3xl font-black tracking-widest text-cyan-400">
-                            <span class="${winnerTeam === 'BLANC' ? 'text-cyan-300 underline' : 'text-slate-300'}">${goalsBlanc}</span>
-                            <span class="text-slate-500 text-2xl mx-1">-</span>
-                            <span class="${winnerTeam === 'MULTICOLORE' ? 'text-pink-400 underline' : 'text-slate-300'}">${goalsMulti}</span>
-                        </div>
-                        <div class="mt-2 inline-block px-3 py-1 rounded-full text-[11px] font-extrabold ${winnerTeam === 'BLANC' ? 'bg-white/10 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}">
-                            Victoire Équipe ${winnerTeam}
-                        </div>
-                    </div>
-
-                    <!-- Statistiques de simulation -->
-                    <div class="space-y-2 text-xs md:border-r border-slate-700/80 md:pr-4">
-                        <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
-                            <span class="text-slate-400">Chances de Victoire :</span>
-                            <span class="font-extrabold text-emerald-400">${winProb}%</span>
-                        </div>
-                        <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
-                            <span class="text-slate-400">Intensité du match :</span>
-                            <span class="font-extrabold text-amber-400">${Math.floor(85 + Math.random() * 14)}%</span>
-                        </div>
-                    </div>
-
-                    <!-- Étoile du match -->
-                    <div class="text-center">
-                        <span class="text-[10px] uppercase tracking-wider font-extrabold text-amber-400 block mb-1">
-                            <i class="fa-solid fa-star mr-1"></i> Étoile du Match
-                        </span>
-                        <div class="text-base font-black text-white bg-amber-500/20 py-1.5 px-3 rounded-lg border border-amber-500/40 inline-block shadow-sm">
-                            ${starPlayer.name} <span class="text-xs font-normal text-amber-300">(${starPlayer.position})</span>
-                        </div>
-                        <p class="text-[11px] text-slate-300 italic mt-2 px-2">
-                            "${starReason}"
+                <div class="space-y-4">
+                    <!-- Résumé textuel de la prédiction -->
+                    <div class="bg-slate-800/80 p-3.5 rounded-xl border border-cyan-500/30 text-xs text-slate-200 leading-relaxed shadow-inner">
+                        <p class="font-semibold text-cyan-300 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-chart-line"></i> Analyse de la rencontre :
                         </p>
+                        <p>${matchSummaryText}</p>
                     </div>
 
+                    <div class="grid md:grid-cols-3 gap-4 items-center bg-slate-900/60 p-5 rounded-xl border border-slate-700/80">
+                        
+                        <!-- Score Prédit -->
+                        <div class="text-center md:border-r border-slate-700/80 md:pr-4">
+                            <span class="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 block mb-1">Score Prédit</span>
+                            <div class="text-3xl font-black tracking-widest text-cyan-400">
+                                <span class="${winnerTeam === 'BLANC' ? 'text-cyan-300 underline' : 'text-slate-300'}">${goalsBlanc}</span>
+                                <span class="text-slate-500 text-2xl mx-1">-</span>
+                                <span class="${winnerTeam === 'MULTICOLORE' ? 'text-pink-400 underline' : 'text-slate-300'}">${goalsMulti}</span>
+                            </div>
+                            <div class="mt-2 inline-block px-3 py-1 rounded-full text-[11px] font-extrabold ${winnerTeam === 'BLANC' ? 'bg-white/10 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}">
+                                Victoire Équipe ${winnerTeam}
+                            </div>
+                        </div>
+
+                        <!-- Statistiques de simulation -->
+                        <div class="space-y-2 text-xs md:border-r border-slate-700/80 md:pr-4">
+                            <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
+                                <span class="text-slate-400">Chances de Victoire :</span>
+                                <span class="font-extrabold text-emerald-400">${winProb}%</span>
+                            </div>
+                            <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
+                                <span class="text-slate-400">Intensité du match :</span>
+                                <span class="font-extrabold text-amber-400">${Math.floor(85 + Math.random() * 14)}%</span>
+                            </div>
+                        </div>
+
+                        <!-- Étoile du match -->
+                        <div class="text-center">
+                            <span class="text-[10px] uppercase tracking-wider font-extrabold text-amber-400 block mb-1">
+                                <i class="fa-solid fa-star mr-1"></i> Étoile du Match
+                            </span>
+                            <div class="text-base font-black text-white bg-amber-500/20 py-1.5 px-3 rounded-lg border border-amber-500/40 inline-block shadow-sm">
+                                ${starPlayer.name} <span class="text-xs font-normal text-amber-300">(${starPlayer.position})</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 italic mt-2 px-2">
+                                "${starReason}"
+                            </p>
+                        </div>
+
+                    </div>
                 </div>
             `;
         }
