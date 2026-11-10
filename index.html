@@ -27,6 +27,13 @@
         body.hide-ratings .team-average-badge {
             display: none !important;
         }
+        
+        /* Animation & Effet Carte Prédiction */
+        .prediction-card {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border: 2px solid #38bdf8;
+            box-shadow: 0 10px 25px -5px rgba(56, 189, 248, 0.25);
+        }
     </style>
 </head>
 <body class="hide-ratings bg-slate-100 text-slate-800 font-sans min-h-screen pb-12">
@@ -241,6 +248,35 @@
                     </div>
                 </div>
 
+            </div>
+
+            <!-- ================= SECTION : PRÉDICTION DU MATCH (SECTION AMUSANTE) ================= -->
+            <div class="prediction-card text-white p-6 rounded-2xl shadow-xl border border-cyan-500/30">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-700/80 pb-4 mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xl border border-cyan-500/30">
+                            <i class="fa-solid fa-crystal-ball"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-cyan-300 tracking-wide flex items-center gap-2">
+                                Prédiction de la Partie
+                                <span class="bg-cyan-500/20 text-cyan-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-cyan-500/40">IA LIGUE</span>
+                            </h3>
+                            <p class="text-xs text-slate-300">Analyse de la cote des équipes & prédiction interactive du héros de la soirée !</p>
+                        </div>
+                    </div>
+
+                    <button onclick="generateMatchPrediction()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Générer la prédiction
+                    </button>
+                </div>
+
+                <!-- Zone de Résultat de la Prédiction -->
+                <div id="prediction-result-container" class="space-y-4">
+                    <div class="text-center py-6 text-slate-400 text-xs italic bg-slate-900/40 rounded-xl border border-slate-800">
+                        Cliquez sur <b class="text-cyan-400">"Générer la prédiction"</b> pour obtenir le score prédit et découvrir qui sera le joueur du match !
+                    </div>
+                </div>
             </div>
 
             <!-- Boutons Export (SMS & Photo Facebook) -->
@@ -1717,6 +1753,105 @@
             if (elMulti) elMulti.innerText = avgMulti;
         }
 
+        // ================= FONCTION DE PRÉDICTION DU MATCH =================
+        function generateMatchPrediction() {
+            const blancList = currentLineup.blanc || [];
+            const multiList = currentLineup.multicolore || [];
+
+            if (blancList.length === 0 || multiList.length === 0) {
+                alert("Veuillez d'abord composer et équilibrer les deux équipes avant de lancer la prédiction !");
+                return;
+            }
+
+            const calcAvgCote = (list) => {
+                if (list.length === 0) return 7.0;
+                return list.reduce((acc, p) => acc + (p.cote || 7.0), 0) / list.length;
+            };
+
+            const avgBlanc = calcAvgCote(blancList);
+            const avgMulti = calcAvgCote(multiList);
+
+            // Calcul du score basé sur les cotes moyennes avec un facteur aléatoire de match
+            const diff = avgBlanc - avgMulti;
+            
+            let goalsBlanc = Math.max(2, Math.round(5 + diff * 1.5 + (Math.random() * 2.5 - 1.2)));
+            let goalsMulti = Math.max(2, Math.round(5 - diff * 1.5 + (Math.random() * 2.5 - 1.2)));
+
+            // Éviter un match nul absolu pour désigner un gagnant
+            if (goalsBlanc === goalsMulti) {
+                if (Math.random() < 0.5) goalsBlanc += 1;
+                else goalsMulti += 1;
+            }
+
+            const winnerTeam = goalsBlanc > goalsMulti ? 'BLANC' : 'MULTICOLORE';
+            const winnerPlayers = winnerTeam === 'BLANC' ? blancList : multiList;
+            const allPlayers = [...blancList, ...multiList];
+
+            // Choix du Joueur de la partie
+            // Privilégier les joueurs à cote plus élevée avec un facteur chance
+            const weightedPlayers = [...winnerPlayers].sort((a,b) => (b.cote + Math.random()*2) - (a.cote + Math.random()*2));
+            const starPlayer = weightedPlayers[0] || allPlayers[0];
+
+            // Raisons amusantes personnalisées
+            const reasons = [
+                `Inarrêtable en attaque avec un tour du chapeau spectaculaire !`,
+                `Un mur infranchissable devant son filet, sauvant la victoire en fin de 3e période.`,
+                `Des replis défensifs monstrueux et une passe décisive parfaite en prolongation !`,
+                `Inspiration pure : il a transporté l'équipe sur ses épaules du début à la fin.`,
+                `Un tir frappé foudroyant dans la lucarne pour sceller l'issue du match !`
+            ];
+            const starReason = reasons[Math.floor(Math.random() * reasons.length)];
+
+            // Probabilité calculée
+            const totalCote = avgBlanc + avgMulti;
+            const winProb = Math.round((winnerTeam === 'BLANC' ? avgBlanc : avgMulti) / totalCote * 100);
+
+            const resultContainer = document.getElementById('prediction-result-container');
+            resultContainer.innerHTML = `
+                <div class="grid md:grid-cols-3 gap-4 items-center bg-slate-900/60 p-5 rounded-xl border border-slate-700/80">
+                    
+                    <!-- Score Prédit -->
+                    <div class="text-center md:border-r border-slate-700/80 md:pr-4">
+                        <span class="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 block mb-1">Score Prédit</span>
+                        <div class="text-3xl font-black tracking-widest text-cyan-400">
+                            <span class="${winnerTeam === 'BLANC' ? 'text-cyan-300 underline' : 'text-slate-300'}">${goalsBlanc}</span>
+                            <span class="text-slate-500 text-2xl mx-1">-</span>
+                            <span class="${winnerTeam === 'MULTICOLORE' ? 'text-pink-400 underline' : 'text-slate-300'}">${goalsMulti}</span>
+                        </div>
+                        <div class="mt-2 inline-block px-3 py-1 rounded-full text-[11px] font-extrabold ${winnerTeam === 'BLANC' ? 'bg-white/10 text-cyan-300 border border-cyan-500/30' : 'bg-pink-500/20 text-pink-300 border border-pink-500/30'}">
+                            Victoire Équipe ${winnerTeam}
+                        </div>
+                    </div>
+
+                    <!-- Statistiques de simulation -->
+                    <div class="space-y-2 text-xs md:border-r border-slate-700/80 md:pr-4">
+                        <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
+                            <span class="text-slate-400">Chances de Victoire :</span>
+                            <span class="font-extrabold text-emerald-400">${winProb}%</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
+                            <span class="text-slate-400">Intensité du match :</span>
+                            <span class="font-extrabold text-amber-400">${Math.floor(85 + Math.random() * 14)}%</span>
+                        </div>
+                    </div>
+
+                    <!-- Étoile du match -->
+                    <div class="text-center">
+                        <span class="text-[10px] uppercase tracking-wider font-extrabold text-amber-400 block mb-1">
+                            <i class="fa-solid fa-star mr-1"></i> Étoile du Match
+                        </span>
+                        <div class="text-base font-black text-white bg-amber-500/20 py-1.5 px-3 rounded-lg border border-amber-500/40 inline-block shadow-sm">
+                            ${starPlayer.name} <span class="text-xs font-normal text-amber-300">(${starPlayer.position})</span>
+                        </div>
+                        <p class="text-[11px] text-slate-300 italic mt-2 px-2">
+                            "${starReason}"
+                        </p>
+                    </div>
+
+                </div>
+            `;
+        }
+
         function copyLineupText() {
             let text = `🏒 *ALIGNEMENT DE LA SEMAINE* 🏒
 
@@ -2374,6 +2509,7 @@
         window.quickAddSubGameFromHistory = quickAddSubGameFromHistory;
         window.restoreCurrentActiveLineup = restoreCurrentActiveLineup;
         window.toggleSubGameStatusFields = toggleSubGameStatusFields;
+        window.generateMatchPrediction = generateMatchPrediction;
     </script>
 </body>
 </html>
