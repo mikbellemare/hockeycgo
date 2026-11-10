@@ -259,10 +259,10 @@
                         </div>
                         <div>
                             <h3 class="text-lg font-bold text-cyan-300 tracking-wide flex items-center gap-2">
-                                Prédiction de la Partie
+                                Prédiction de la Partie & Statistiques Prédites
                                 <span class="bg-cyan-500/20 text-cyan-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-cyan-500/40">IA LIGUE</span>
                             </h3>
-                            <p class="text-xs text-slate-300">Analyse de la cote des équipes & prédiction interactive du héros de la soirée !</p>
+                            <p class="text-xs text-slate-300">Analyse de la cote, score prédit, statistiques individuelles simulées et étoile de la soirée !</p>
                         </div>
                     </div>
 
@@ -274,7 +274,7 @@
                 <!-- Zone de Résultat de la Prédiction -->
                 <div id="prediction-result-container" class="space-y-4">
                     <div class="text-center py-6 text-slate-400 text-xs italic bg-slate-900/40 rounded-xl border border-slate-800">
-                        Cliquez sur <b class="text-cyan-400">"Générer la prédiction"</b> pour obtenir le score prédit et découvrir qui sera le joueur du match !
+                        Cliquez sur <b class="text-cyan-400">"Générer la prédiction"</b> pour obtenir le score prédit, les statistiques individuelles de chaque joueur et découvrir le héros du match !
                     </div>
                 </div>
             </div>
@@ -1753,7 +1753,7 @@
             if (elMulti) elMulti.innerText = avgMulti;
         }
 
-        // ================= FONCTION DE PRÉDICTION DU MATCH =================
+        // ================= FONCTION DE PRÉDICTION DU MATCH & STATISTIQUES =================
         function generateMatchPrediction() {
             const blancList = currentLineup.blanc || [];
             const multiList = currentLineup.multicolore || [];
@@ -1771,13 +1771,11 @@
             const avgBlanc = calcAvgCote(blancList);
             const avgMulti = calcAvgCote(multiList);
 
-            // Calcul du score basé sur les cotes moyennes avec un facteur aléatoire de match
             const diff = avgBlanc - avgMulti;
             
             let goalsBlanc = Math.max(2, Math.round(5 + diff * 1.5 + (Math.random() * 2.5 - 1.2)));
             let goalsMulti = Math.max(2, Math.round(5 - diff * 1.5 + (Math.random() * 2.5 - 1.2)));
 
-            // Éviter un match nul absolu pour désigner un gagnant
             if (goalsBlanc === goalsMulti) {
                 if (Math.random() < 0.5) goalsBlanc += 1;
                 else goalsMulti += 1;
@@ -1787,11 +1785,9 @@
             const winnerPlayers = winnerTeam === 'BLANC' ? blancList : multiList;
             const allPlayers = [...blancList, ...multiList];
 
-            // Choix du Joueur de la partie
             const weightedPlayers = [...winnerPlayers].sort((a,b) => (b.cote + Math.random()*2) - (a.cote + Math.random()*2));
             const starPlayer = weightedPlayers[0] || allPlayers[0];
 
-            // Raisons adaptées strictement à la position du joueur sélectionné
             const reasonsByPosition = {
                 'Gardien': [
                     `Un mur infranchissable devant son filet, sauvant la victoire avec des arrêts clés en 3e période !`,
@@ -1813,17 +1809,55 @@
             const posReasons = reasonsByPosition[starPlayer.position] || reasonsByPosition['Attaquant'];
             const starReason = posReasons[Math.floor(Math.random() * posReasons.length)];
 
-            // Probabilité calculée
             const totalCote = avgBlanc + avgMulti;
             const winProb = Math.round((winnerTeam === 'BLANC' ? avgBlanc : avgMulti) / totalCote * 100);
 
-            // Textes d'analyse globale de la partie (2-3 lignes)
             const matchAnalyses = [
                 `Selon notre modèle de simulation, ce duel s'annonce extrêmement rythmé. L'Équipe ${winnerTeam} devrait prendre l'avantage grâce à sa synergie collective et une efficacité redoutable sur les revirements.`,
                 `Une confrontation serrée où la profondeur des bancs fera toute la différence. L'Équipe ${winnerTeam} profitera d'une meilleure présence physique et de tirs de qualité en fin de match pour l'emporter.`,
                 `Un match très offensif en perspective ! L'Équipe ${winnerTeam} saura imposer son rythme dès le premier tiers-temps pour conserver l'avantage jusqu'au coup de sifflet final.`
             ];
             const matchSummaryText = matchAnalyses[Math.floor(Math.random() * matchAnalyses.length)];
+
+            // Générateur de statistiques simulées par joueur
+            const generatePlayerStats = (player, isWinningTeam) => {
+                if (player.position === 'Gardien') {
+                    const baseSv = isWinningTeam ? (88 + Math.random() * 8) : (82 + Math.random() * 8);
+                    return { savePct: baseSv.toFixed(1) + '%' };
+                } else {
+                    const skillFactor = (player.cote || 7) / 7.5;
+                    const teamBonus = isWinningTeam ? 1.2 : 0.8;
+                    const goals = Math.max(0, Math.floor(Math.random() * 3 * skillFactor * teamBonus));
+                    const assists = Math.max(0, Math.floor(Math.random() * 4 * skillFactor * teamBonus));
+                    const points = goals + assists;
+                    const plusMinus = isWinningTeam ? `+${Math.floor(1 + Math.random() * 3)}` : `-${Math.floor(0 + Math.random() * 3)}`;
+                    const shots = Math.max(1, Math.floor(2 + Math.random() * 5 * skillFactor));
+                    return { goals, assists, points, plusMinus, shots };
+                }
+            };
+
+            const buildTeamStatsHTML = (teamList, teamName, isWinner) => {
+                return teamList.map(p => {
+                    const stats = generatePlayerStats(p, isWinner);
+                    let statsDisplay = '';
+                    if (p.position === 'Gardien') {
+                        statsDisplay = `<span class="text-cyan-300 font-bold">% Arrêt: ${stats.savePct}</span>`;
+                    } else {
+                        statsDisplay = `B: <b>${stats.goals}</b> | P: <b>${stats.assists}</b> | Pts: <b class="text-amber-300">${stats.points}</b> | +/-: <span class="${stats.plusMinus.includes('+') ? 'text-emerald-400' : 'text-rose-400'} font-bold">${stats.plusMinus}</span> | Tirs: <b>${stats.shots}</b>`;
+                    }
+                    return `
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-800/60 p-2 rounded-lg border border-slate-700/60 text-xs gap-1">
+                            <div>
+                                <span class="font-bold text-white">${p.name}</span>
+                                <span class="text-slate-400 text-[11px] ml-1">(${p.position})</span>
+                            </div>
+                            <div class="text-[11px] text-slate-300">
+                                ${statsDisplay}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            };
 
             const resultContainer = document.getElementById('prediction-result-container');
             resultContainer.innerHTML = `
@@ -1876,6 +1910,31 @@
                             </p>
                         </div>
 
+                    </div>
+
+                    <!-- Statistiques Prédites Détaillées par Équipe -->
+                    <div class="grid md:grid-cols-2 gap-4 pt-2">
+                        <!-- Équipe Blanc Stats -->
+                        <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 space-y-2">
+                            <h4 class="text-xs font-bold uppercase text-cyan-300 border-b border-slate-700 pb-1 flex items-center justify-between">
+                                <span>⚪ Stats Prédites - Équipe Blanc</span>
+                                <span class="text-[10px] text-slate-400">B | P | Pts | +/- | Tirs</span>
+                            </h4>
+                            <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                ${buildTeamStatsHTML(blancList, 'Blanc', winnerTeam === 'BLANC')}
+                            </div>
+                        </div>
+
+                        <!-- Équipe Multicolore Stats -->
+                        <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 space-y-2">
+                            <h4 class="text-xs font-bold uppercase text-pink-300 border-b border-slate-700 pb-1 flex items-center justify-between">
+                                <span>🎨 Stats Prédites - Équipe Multicolore</span>
+                                <span class="text-[10px] text-slate-400">B | P | Pts | +/- | Tirs</span>
+                            </h4>
+                            <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                ${buildTeamStatsHTML(multiList, 'Multicolore', winnerTeam === 'MULTICOLORE')}
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
