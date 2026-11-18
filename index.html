@@ -34,6 +34,12 @@
             border: 2px solid #38bdf8;
             box-shadow: 0 10px 25px -5px rgba(56, 189, 248, 0.25);
         }
+
+        /* Classe temporaire lors de la capture photo pour éviter les scrollbars coupées */
+        .capturing-snapshot .stats-scroll-list {
+            max-height: none !important;
+            overflow: visible !important;
+        }
     </style>
 </head>
 <body class="hide-ratings bg-slate-100 text-slate-800 font-sans min-h-screen pb-12">
@@ -120,7 +126,7 @@
                     </div>
                 </div>
 
-                <!-- Sélection des présences avec format de cartes d'origine -->
+                <!-- Sélection des présences -->
                 <div class="mt-6 border-t border-slate-100 pt-4">
                     <div class="flex justify-between items-center mb-4">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Présences pour la partie (<span id="count-present">0</span> sélectionnés)</span>
@@ -250,8 +256,18 @@
 
             </div>
 
-            <!-- ================= SECTION : PRÉDICTION DU MATCH (SECTION AMUSANTE) ================= -->
-            <div class="prediction-card text-white p-6 rounded-2xl shadow-xl border border-cyan-500/30">
+            <!-- Boutons Export Alignement (SMS & Photo Facebook) -->
+            <div class="flex flex-wrap justify-end gap-3">
+                <button onclick="copyLineupText()" class="px-5 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold shadow flex items-center gap-2">
+                    <i class="fa-regular fa-copy"></i> Copier l'alignement pour SMS / Messenger
+                </button>
+                <button onclick="takeTeamsSnapshot(event)" class="px-5 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl font-semibold shadow flex items-center gap-2 transition-all">
+                    <i class="fa-solid fa-camera"></i> Snapshot Alignement (Facebook)
+                </button>
+            </div>
+
+            <!-- ================= SECTION : PRÉDICTION DU MATCH ================= -->
+            <div id="prediction-capture-container" class="prediction-card text-white p-6 rounded-2xl shadow-xl border border-cyan-500/30">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-700/80 pb-4 mb-4">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xl border border-cyan-500/30">
@@ -262,13 +278,18 @@
                                 Prédiction de la Partie & Statistiques Prédites
                                 <span class="bg-cyan-500/20 text-cyan-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-cyan-500/40">IA LIGUE</span>
                             </h3>
-                            <p class="text-xs text-slate-300">Analyse de la cote, score prédit, statistiques individuelles simulées et étoile de la soirée !</p>
+                            <p class="text-xs text-slate-300">Analyse de la cote, score prédit, statistiques individuelles cohérentes et étoile de la soirée !</p>
                         </div>
                     </div>
 
-                    <button onclick="generateMatchPrediction()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-2">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i> Générer la prédiction
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2" data-html2canvas-ignore="true">
+                        <button onclick="generateMatchPrediction()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Générer la prédiction
+                        </button>
+                        <button onclick="takePredictionSnapshot(event)" id="btn-snapshot-prediction" class="hidden px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-camera"></i> Snapshot Prédiction (Facebook)
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Zone de Résultat de la Prédiction -->
@@ -279,15 +300,6 @@
                 </div>
             </div>
 
-            <!-- Boutons Export (SMS & Photo Facebook) -->
-            <div class="flex flex-wrap justify-end gap-3">
-                <button onclick="copyLineupText()" class="px-5 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold shadow flex items-center gap-2">
-                    <i class="fa-regular fa-copy"></i> Copier l'alignement pour SMS / Messenger
-                </button>
-                <button onclick="takeTeamsSnapshot()" class="px-5 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl font-semibold shadow flex items-center gap-2 transition-all">
-                    <i class="fa-solid fa-camera"></i> Prendre en photo (Snapshot Facebook)
-                </button>
-            </div>
         </section>
 
 
@@ -429,7 +441,7 @@
                         <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
                             <i class="fa-solid fa-user-clock text-amber-600"></i> Suivi Partie par Partie des Remplaçants (Subs)
                         </h2>
-                        <p class="text-xs text-slate-500">Ajoutez les parties jouées par les remplaçants (option partie gratuite disponible).</p>
+                        <p class="text-xs text-slate-500">Les remplaçants cochés dans l'alignement sont ajoutés automatiquement ici comme « Non payé ».</p>
                     </div>
                     <button onclick="openSubGameModal()" class="admin-only px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow text-xs flex items-center gap-2">
                         <i class="fa-solid fa-plus-circle"></i> Enregistrer une partie jouée
@@ -977,6 +989,28 @@
             }
         }
 
+        // Helper pour ajouter automatiquement une partie impayée si un remplaçant est sélectionné
+        function ensureSubUnpaidGameForToday(player) {
+            if (!player || player.type !== 'REMPLACANT') return;
+            if (!player.subGames) player.subGames = [];
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const alreadyLoggedToday = player.subGames.some(g => g.date === todayStr);
+
+            if (!alreadyLoggedToday) {
+                const isGoalie = player.position === 'Gardien';
+                player.subGames.push({
+                    id: Date.now() + Math.floor(Math.random() * 1000),
+                    date: todayStr,
+                    amount: isGoalie ? 0 : subRate,
+                    status: isGoalie ? 'PAYE' : 'NON_PAYE',
+                    method: isGoalie ? 'Gratuit / Ignoré' : 'Non spécifié',
+                    payDate: '',
+                    isFree: isGoalie
+                });
+            }
+        }
+
         async function publishLineup() {
             if(!currentUser) return;
             const btn = document.getElementById('btn-save-lineup');
@@ -1087,7 +1121,7 @@
                     if (!matchGame) {
                         statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-600">Non inscrite dans la fiche</span>`;
                         if (currentUser) {
-                            actionBtn = `<button onclick="quickAddSubGameFromHistory(${sub.id}, '${archiveDate}')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-[11px] shadow">+ Inscrire partie (25$)</button>`;
+                            actionBtn = `<button onclick="quickAddSubGameFromHistory(${sub.id}, '${archiveDate}')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-[11px] shadow">+ Inscrire partie (${subRate}$)</button>`;
                         }
                     } else if (matchGame.isFree) {
                         statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-800">Partie Gratuite (0$)</span>`;
@@ -1158,14 +1192,13 @@
             const player = players.find(p => p.id === subId);
             if (player) {
                 if (!player.subGames) player.subGames = [];
-                const todayStr = new Date().toISOString().split('T')[0];
                 player.subGames.push({
                     id: Date.now(),
                     date: dateStr,
                     amount: subRate,
-                    status: 'PAYE',
-                    method: 'Interac / Virement',
-                    payDate: todayStr,
+                    status: 'NON_PAYE',
+                    method: 'Non spécifié',
+                    payDate: '',
                     isFree: false
                 });
                 saveStorage();
@@ -1212,42 +1245,67 @@
             }
         }
 
-        function takeTeamsSnapshot() {
-            const container = document.getElementById('teams-capture-container');
-            const btn = event.currentTarget;
-            const originalHTML = btn.innerHTML;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Génération...`;
-            btn.disabled = true;
+        // Fonction générique de capture et copie dans le presse-papier
+        function captureElementToClipboard(elementId, btnElement, fileNamePrefix, hideRatingsDuringCapture = false, backgroundColor = '#f1f5f9') {
+            const container = document.getElementById(elementId);
+            if (!container) return;
+
+            const originalHTML = btnElement ? btnElement.innerHTML : '';
+            if (btnElement) {
+                btnElement.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Génération...`;
+                btnElement.disabled = true;
+            }
 
             const wasHidden = document.body.classList.contains('hide-ratings');
-            document.body.classList.add('hide-ratings');
+            if (hideRatingsDuringCapture) {
+                document.body.classList.add('hide-ratings');
+            }
+            document.body.classList.add('capturing-snapshot');
 
-            html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#f1f5f9' }).then(canvas => {
+            html2canvas(container, { scale: 2, useCORS: true, backgroundColor: backgroundColor }).then(canvas => {
                 canvas.toBlob(blob => {
                     const item = new ClipboardItem({ "image/png": blob });
                     navigator.clipboard.write([item]).then(() => {
-                        alert("📸 Photo copiée dans le presse-papier ! Prête à coller sur Facebook.");
+                        alert("📸 Image copiée dans le presse-papier ! Prête à coller sur Facebook (Ctrl+V ou Cmd+V).");
                     }).catch(() => {
                         const link = document.createElement('a');
-                        link.download = `alignement-${new Date().toISOString().split('T')[0]}.png`;
+                        link.download = `${fileNamePrefix}-${new Date().toISOString().split('T')[0]}.png`;
                         link.href = canvas.toDataURL();
                         link.click();
                         alert("📸 Image téléchargée sur votre appareil !");
                     });
-                    if (!wasHidden) {
+
+                    if (hideRatingsDuringCapture && !wasHidden) {
                         document.body.classList.remove('hide-ratings');
                     }
-                    btn.innerHTML = originalHTML;
-                    btn.disabled = false;
+                    document.body.classList.remove('capturing-snapshot');
+
+                    if (btnElement) {
+                        btnElement.innerHTML = originalHTML;
+                        btnElement.disabled = false;
+                    }
                 });
             }).catch(err => {
                 console.error(err);
-                if (!wasHidden) {
+                if (hideRatingsDuringCapture && !wasHidden) {
                     document.body.classList.remove('hide-ratings');
                 }
-                btn.innerHTML = originalHTML;
-                btn.disabled = false;
+                document.body.classList.remove('capturing-snapshot');
+                if (btnElement) {
+                    btnElement.innerHTML = originalHTML;
+                    btnElement.disabled = false;
+                }
             });
+        }
+
+        function takeTeamsSnapshot(e) {
+            const btn = e ? e.currentTarget : null;
+            captureElementToClipboard('teams-capture-container', btn, 'alignement', true, '#f1f5f9');
+        }
+
+        function takePredictionSnapshot(e) {
+            const btn = e ? e.currentTarget : null;
+            captureElementToClipboard('prediction-capture-container', btn, 'prediction-match', false, '#0f172a');
         }
 
         function getCurrentUserRole() {
@@ -1589,17 +1647,37 @@
 
         function togglePresence(id) {
             if(!currentUser) return;
-            if (selectedPresenceIds.has(id)) selectedPresenceIds.delete(id);
-            else selectedPresenceIds.add(id);
+            if (selectedPresenceIds.has(id)) {
+                selectedPresenceIds.delete(id);
+            } else {
+                selectedPresenceIds.add(id);
+                // Si c'est un remplaçant, l'ajouter automatiquement à son historique financier comme NON_PAYE pour aujourd'hui
+                const player = players.find(p => p.id === id);
+                if (player && player.type === 'REMPLACANT') {
+                    ensureSubUnpaidGameForToday(player);
+                }
+            }
             renderPresenceSelector();
+            renderSubFinanceTable();
+            updateFinanceStats();
             saveStorage();
         }
 
         function checkAll(status) {
             if(!currentUser) return;
-            if (status) players.forEach(p => selectedPresenceIds.add(p.id));
-            else selectedPresenceIds.clear();
+            if (status) {
+                players.forEach(p => {
+                    selectedPresenceIds.add(p.id);
+                    if (p.type === 'REMPLACANT') {
+                        ensureSubUnpaidGameForToday(p);
+                    }
+                });
+            } else {
+                selectedPresenceIds.clear();
+            }
             renderPresenceSelector();
+            renderSubFinanceTable();
+            updateFinanceStats();
             saveStorage();
         }
 
@@ -1753,7 +1831,7 @@
             if (elMulti) elMulti.innerText = avgMulti;
         }
 
-        // ================= FONCTION DE PRÉDICTION DU MATCH & STATISTIQUES =================
+        // ================= FONCTION DE PRÉDICTION DU MATCH & STATISTIQUES COHÉRENTES =================
         function generateMatchPrediction() {
             const blancList = currentLineup.blanc || [];
             const multiList = currentLineup.multicolore || [];
@@ -1770,9 +1848,9 @@
 
             const avgBlanc = calcAvgCote(blancList);
             const avgMulti = calcAvgCote(multiList);
-
             const diff = avgBlanc - avgMulti;
             
+            // Calcul du score final réaliste
             let goalsBlanc = Math.max(2, Math.round(5 + diff * 1.5 + (Math.random() * 2.5 - 1.2)));
             let goalsMulti = Math.max(2, Math.round(5 - diff * 1.5 + (Math.random() * 2.5 - 1.2)));
 
@@ -1782,32 +1860,148 @@
             }
 
             const winnerTeam = goalsBlanc > goalsMulti ? 'BLANC' : 'MULTICOLORE';
-            const winnerPlayers = winnerTeam === 'BLANC' ? blancList : multiList;
-            const allPlayers = [...blancList, ...multiList];
+            const goalDiff = goalsBlanc - goalsMulti;
 
-            const weightedPlayers = [...winnerPlayers].sort((a,b) => (b.cote + Math.random()*2) - (a.cote + Math.random()*2));
-            const starPlayer = weightedPlayers[0] || allPlayers[0];
+            // Sélection pondérée d'un joueur dans une liste
+            const pickWeightedPlayer = (candidates, excludeId = null) => {
+                const pool = excludeId ? candidates.filter(p => p.id !== excludeId) : candidates;
+                if (pool.length === 0) return null;
 
-            const reasonsByPosition = {
-                'Gardien': [
-                    `Un mur infranchissable devant son filet, sauvant la victoire avec des arrêts clés en 3e période !`,
-                    `Mitaine de voleur et sang-froid exemplaire : il a complètement frustré les attaquants adverses !`,
-                    `Performance digne d'un blanchissage, repoussant tir après tir dans les moments chauds !`
-                ],
-                'Défenseur': [
-                    `Des replis défensifs monstrueux, des tirs bloqués et une passe savante sur le but gagnant !`,
-                    `Un tir frappé foudroyant de la ligne bleue et une présence physique dominante en zone défensive !`,
-                    `Une relance impeccable et un contrôle parfait du tempo de la rencontre !`
-                ],
-                'Attaquant': [
-                    `Inarrêtable en attaque avec un tour du chapeau spectaculaire et une énergie débordante !`,
-                    `Vitesse explosive et feintes déroutantes : il a percé la défense adverse à plusieurs reprises !`,
-                    `Opportuniste hors pair avec le but de la victoire marqué sur un tir opportuniste !`
-                ]
+                const weights = pool.map(p => {
+                    const posMult = p.position === 'Attaquant' ? 1.5 : (p.position === 'Défenseur' ? 0.8 : 0.1);
+                    return Math.pow(p.cote || 7, 2) * posMult;
+                });
+
+                const totalWeight = weights.reduce((a, b) => a + b, 0);
+                let rnd = Math.random() * totalWeight;
+                for (let i = 0; i < pool.length; i++) {
+                    rnd -= weights[i];
+                    if (rnd <= 0) return pool[i];
+                }
+                return pool[pool.length - 1];
             };
 
-            const posReasons = reasonsByPosition[starPlayer.position] || reasonsByPosition['Attaquant'];
-            const starReason = posReasons[Math.floor(Math.random() * posReasons.length)];
+            // Simulation cohérente : la somme des buts individuels = totalGoals de l'équipe
+            const simulateTeamStats = (teamList, goalsFor, goalsAgainst, isWinner) => {
+                const skaters = teamList.filter(p => p.position !== 'Gardien');
+                const goalies = teamList.filter(p => p.position === 'Gardien');
+
+                const statsMap = {};
+                teamList.forEach(p => {
+                    statsMap[p.id] = {
+                        player: p,
+                        goals: 0,
+                        assists: 0,
+                        points: 0,
+                        plusMinus: 0,
+                        shots: 0,
+                        savePct: '0.0%'
+                    };
+                });
+
+                // 1. Distribution exacte des buts (goalsFor)
+                for (let g = 0; g < goalsFor; g++) {
+                    const scorer = pickWeightedPlayer(skaters);
+                    if (scorer) {
+                        statsMap[scorer.id].goals += 1;
+                        statsMap[scorer.id].points += 1;
+
+                        // 0 à 2 passes par but (75% chance d'une 1ère passe, 45% chance d'une 2ème passe)
+                        const hasFirstAssist = skaters.length > 1 && Math.random() < 0.75;
+                        let firstAssister = null;
+                        if (hasFirstAssist) {
+                            firstAssister = pickWeightedPlayer(skaters, scorer.id);
+                            if (firstAssister) {
+                                statsMap[firstAssister.id].assists += 1;
+                                statsMap[firstAssister.id].points += 1;
+                            }
+                        }
+
+                        const hasSecondAssist = skaters.length > 2 && firstAssister && Math.random() < 0.45;
+                        if (hasSecondAssist) {
+                            const remainingPool = skaters.filter(p => p.id !== scorer.id && p.id !== firstAssister.id);
+                            const secondAssister = pickWeightedPlayer(remainingPool);
+                            if (secondAssister) {
+                                statsMap[secondAssister.id].assists += 1;
+                                statsMap[secondAssister.id].points += 1;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Tirs au but (toujours >= buts marqués par le joueur) & Différentiel +/-
+                let totalTeamShots = 0;
+                const teamGoalDiff = isWinner ? Math.abs(goalDiff) : -Math.abs(goalDiff);
+
+                skaters.forEach(p => {
+                    const st = statsMap[p.id];
+                    const skillFactor = (p.cote || 7) / 7.5;
+                    const extraShots = Math.floor(Math.random() * 4 * skillFactor) + (p.position === 'Attaquant' ? 1 : 0);
+                    st.shots = st.goals + extraShots;
+                    totalTeamShots += st.shots;
+
+                    // Différentiel cohérent avec l'écart du match et les points du joueur
+                    const variance = Math.floor(Math.random() * 3) - 1; // -1, 0 ou +1
+                    st.plusMinus = Math.round(teamGoalDiff * 0.5 + (st.points * 0.6) + variance);
+                });
+
+                // Si aucun patineur n'était présent, garantir un minimum de tirs
+                if (totalTeamShots < goalsFor) {
+                    totalTeamShots = goalsFor + 15;
+                }
+
+                return { statsMap, totalTeamShots, goalies };
+            };
+
+            const blancSim = simulateTeamStats(blancList, goalsBlanc, goalsMulti, winnerTeam === 'BLANC');
+            const multiSim = simulateTeamStats(multiList, goalsMulti, goalsBlanc, winnerTeam === 'MULTICOLORE');
+
+            // 3. Calcul cohérent du % d'arrêt des gardiens basé sur les tirs adverses et buts accordés
+            const assignGoalieStats = (simData, shotsAgainst, goalsAgainst) => {
+                const { goalies, statsMap } = simData;
+                if (goalies.length === 0) return;
+
+                const validShots = Math.max(goalsAgainst + 8, shotsAgainst);
+                const saves = validShots - goalsAgainst;
+                const basePct = (saves / validShots) * 100;
+
+                goalies.forEach((g, idx) => {
+                    // Légère variation s'il y a 2 gardiens dans la même équipe
+                    const adj = goalies.length > 1 ? (idx === 0 ? 0.6 : -0.6) : 0;
+                    const finalPct = Math.min(98.5, Math.max(72.0, basePct + adj));
+                    statsMap[g.id].savePct = finalPct.toFixed(1) + '%';
+                    statsMap[g.id].numericSavePct = finalPct;
+                });
+            };
+
+            assignGoalieStats(blancSim, multiSim.totalTeamShots, goalsMulti);
+            assignGoalieStats(multiSim, blancSim.totalTeamShots, goalsBlanc);
+
+            // 4. Sélection de l'Étoile du Match cohérente avec les stats générées
+            const winnerSim = winnerTeam === 'BLANC' ? blancSim : multiSim;
+            const winnerStatsList = Object.values(winnerSim.statsMap);
+
+            // Trier les joueurs de l'équipe gagnante par impact (Points > Buts > % Arrêt élevé)
+            winnerStatsList.sort((a, b) => {
+                if (a.player.position === 'Gardien' && (a.numericSavePct || 0) >= 91.5) return -1;
+                if (b.player.position === 'Gardien' && (b.numericSavePct || 0) >= 91.5) return 1;
+                if (b.points !== a.points) return b.points - a.points;
+                return b.goals - a.goals;
+            });
+
+            const starEntry = winnerStatsList[0];
+            const starPlayer = starEntry ? starEntry.player : (winnerTeam === 'BLANC' ? blancList[0] : multiList[0]);
+
+            let starReason = '';
+            if (starPlayer.position === 'Gardien') {
+                starReason = `Un mur infranchissable devant son filet avec un taux d'efficacité de ${starEntry.savePct}, frustrant les attaquants adverses en 3e période !`;
+            } else if (starEntry.goals >= 3) {
+                starReason = `Tour du chapeau spectaculaire (${starEntry.goals} buts, ${starEntry.assists} passe${starEntry.assists > 1 ? 's' : ''}) ! Il a complètement dominé l'attaque ce soir.`;
+            } else if (starEntry.points >= 2) {
+                starReason = `Performance offensive clé avec ${starEntry.goals} but${starEntry.goals > 1 ? 's' : ''} et ${starEntry.assists} passe${starEntry.assists > 1 ? 's' : ''} (${starEntry.points} pts), menant son équipe à la victoire !`;
+            } else {
+                starReason = `Présence dominante sur la patinoire et jeu décisif dans les moments chauds de la rencontre !`;
+            }
 
             const totalCote = avgBlanc + avgMulti;
             const winProb = Math.round((winnerTeam === 'BLANC' ? avgBlanc : avgMulti) / totalCote * 100);
@@ -1819,37 +2013,29 @@
             ];
             const matchSummaryText = matchAnalyses[Math.floor(Math.random() * matchAnalyses.length)];
 
-            // Générateur de statistiques simulées par joueur
-            const generatePlayerStats = (player, isWinningTeam) => {
-                if (player.position === 'Gardien') {
-                    const baseSv = isWinningTeam ? (88 + Math.random() * 8) : (82 + Math.random() * 8);
-                    return { savePct: baseSv.toFixed(1) + '%' };
-                } else {
-                    const skillFactor = (player.cote || 7) / 7.5;
-                    const teamBonus = isWinningTeam ? 1.2 : 0.8;
-                    const goals = Math.max(0, Math.floor(Math.random() * 3 * skillFactor * teamBonus));
-                    const assists = Math.max(0, Math.floor(Math.random() * 4 * skillFactor * teamBonus));
-                    const points = goals + assists;
-                    const plusMinus = isWinningTeam ? `+${Math.floor(1 + Math.random() * 3)}` : `-${Math.floor(0 + Math.random() * 3)}`;
-                    const shots = Math.max(1, Math.floor(2 + Math.random() * 5 * skillFactor));
-                    return { goals, assists, points, plusMinus, shots };
-                }
-            };
+            const buildTeamStatsHTML = (teamList, statsMap) => {
+                // Trier l'affichage : Gardiens en haut, puis par points décroissants
+                const sortedList = [...teamList].sort((a, b) => {
+                    if (a.position === 'Gardien' && b.position !== 'Gardien') return -1;
+                    if (a.position !== 'Gardien' && b.position === 'Gardien') return 1;
+                    return (statsMap[b.id].points || 0) - (statsMap[a.id].points || 0);
+                });
 
-            const buildTeamStatsHTML = (teamList, teamName, isWinner) => {
-                return teamList.map(p => {
-                    const stats = generatePlayerStats(p, isWinner);
+                return sortedList.map(p => {
+                    const stats = statsMap[p.id];
                     let statsDisplay = '';
                     if (p.position === 'Gardien') {
                         statsDisplay = `<span class="text-cyan-300 font-bold">% Arrêt: ${stats.savePct}</span>`;
                     } else {
-                        statsDisplay = `B: <b>${stats.goals}</b> | P: <b>${stats.assists}</b> | Pts: <b class="text-amber-300">${stats.points}</b> | +/-: <span class="${stats.plusMinus.includes('+') ? 'text-emerald-400' : 'text-rose-400'} font-bold">${stats.plusMinus}</span> | Tirs: <b>${stats.shots}</b>`;
+                        const pmStr = stats.plusMinus > 0 ? `+${stats.plusMinus}` : `${stats.plusMinus}`;
+                        const pmClass = stats.plusMinus > 0 ? 'text-emerald-400' : (stats.plusMinus < 0 ? 'text-rose-400' : 'text-slate-400');
+                        statsDisplay = `B: <b>${stats.goals}</b> | P: <b>${stats.assists}</b> | Pts: <b class="text-amber-300">${stats.points}</b> | +/-: <span class="${pmClass} font-bold">${pmStr}</span> | Tirs: <b>${stats.shots}</b>`;
                     }
                     return `
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-800/60 p-2 rounded-lg border border-slate-700/60 text-xs gap-1">
                             <div>
                                 <span class="font-bold text-white">${p.name}</span>
-                                <span class="text-slate-400 text-[11px] ml-1">(${p.position})</span>
+                                <span class="text-slate-400 text-[11px] ml-1">(${p.position.substring(0,3)})</span>
                             </div>
                             <div class="text-[11px] text-slate-300">
                                 ${statsDisplay}
@@ -1892,8 +2078,8 @@
                                 <span class="font-extrabold text-emerald-400">${winProb}%</span>
                             </div>
                             <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
-                                <span class="text-slate-400">Intensité du match :</span>
-                                <span class="font-extrabold text-amber-400">${Math.floor(85 + Math.random() * 14)}%</span>
+                                <span class="text-slate-400">Tirs au but (B vs M) :</span>
+                                <span class="font-extrabold text-amber-400">${blancSim.totalTeamShots} - ${multiSim.totalTeamShots}</span>
                             </div>
                         </div>
 
@@ -1917,50 +2103,43 @@
                         <!-- Équipe Blanc Stats -->
                         <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 space-y-2">
                             <h4 class="text-xs font-bold uppercase text-cyan-300 border-b border-slate-700 pb-1 flex items-center justify-between">
-                                <span>⚪ Stats Prédites - Équipe Blanc</span>
+                                <span>⚪ Stats Prédites - Équipe Blanc (${goalsBlanc} buts)</span>
                                 <span class="text-[10px] text-slate-400">B | P | Pts | +/- | Tirs</span>
                             </h4>
-                            <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                                ${buildTeamStatsHTML(blancList, 'Blanc', winnerTeam === 'BLANC')}
+                            <div class="stats-scroll-list space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                                ${buildTeamStatsHTML(blancList, blancSim.statsMap)}
                             </div>
                         </div>
 
                         <!-- Équipe Multicolore Stats -->
                         <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 space-y-2">
                             <h4 class="text-xs font-bold uppercase text-pink-300 border-b border-slate-700 pb-1 flex items-center justify-between">
-                                <span>🎨 Stats Prédites - Équipe Multicolore</span>
+                                <span>🎨 Stats Prédites - Équipe Multicolore (${goalsMulti} buts)</span>
                                 <span class="text-[10px] text-slate-400">B | P | Pts | +/- | Tirs</span>
                             </h4>
-                            <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                                ${buildTeamStatsHTML(multiList, 'Multicolore', winnerTeam === 'MULTICOLORE')}
+                            <div class="stats-scroll-list space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                                ${buildTeamStatsHTML(multiList, multiSim.statsMap)}
                             </div>
                         </div>
                     </div>
                 </div>
             `;
+
+            // Afficher le bouton Snapshot Facebook pour les prédictions
+            const snapBtn = document.getElementById('btn-snapshot-prediction');
+            if (snapBtn) snapBtn.classList.remove('hidden');
         }
 
         function copyLineupText() {
-            let text = `🏒 *ALIGNEMENT DE LA SEMAINE* 🏒
-
-`;
-            text += `⚪ *ÉQUIPE BLANC*
-`;
-            text += `G: ${currentLineup.blanc.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}
-`;
-            text += `DEF: ${currentLineup.blanc.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}
-`;
-            text += `ATT: ${currentLineup.blanc.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}
-
-`;
-            text += `🎨 *ÉQUIPE MULTICOLORE*
-`;
-            text += `G: ${currentLineup.multicolore.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}
-`;
-            text += `DEF: ${currentLineup.multicolore.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}
-`;
-            text += `ATT: ${currentLineup.multicolore.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}
-`;
+            let text = `🏒 *ALIGNEMENT DE LA SEMAINE* 🏒\n\n`;
+            text += `⚪ *ÉQUIPE BLANC*\n`;
+            text += `G: ${currentLineup.blanc.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            text += `DEF: ${currentLineup.blanc.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            text += `ATT: ${currentLineup.blanc.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n\n`;
+            text += `🎨 *ÉQUIPE MULTICOLORE*\n`;
+            text += `G: ${currentLineup.multicolore.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            text += `DEF: ${currentLineup.multicolore.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            text += `ATT: ${currentLineup.multicolore.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n`;
 
             navigator.clipboard.writeText(text);
             alert("Alignement copié dans le presse-papier !");
@@ -2065,6 +2244,7 @@
 
         function renderSubFinanceTable() {
             const tbody = document.getElementById('sub-finance-table-body');
+            if(!tbody) return;
             tbody.innerHTML = '';
             const subs = players.filter(p => p.type === 'REMPLACANT');
 
@@ -2092,7 +2272,7 @@
                             const payDateText = g.payDate ? ` (${g.payDate})` : '';
                             badgeHtml = `<span class="text-emerald-700 font-bold">✓ Payé${payDateText}</span>`;
                         } else {
-                            badgeHtml = currentUser ? `<button onclick="openSubGameModalForPlayer(${sub.id}, ${g.id})" class="text-xs text-rose-600 font-bold underline">Éditer / Régler</button>` : `<span class="text-xs text-rose-600 font-bold">Impayé</span>`;
+                            badgeHtml = currentUser ? `<button onclick="openSubGameModalForPlayer(${sub.id}, ${g.id})" class="text-xs text-rose-600 font-bold underline">Non payé / Régler</button>` : `<span class="text-xs text-rose-600 font-bold">Impayé</span>`;
                         }
 
                         let editBtn = currentUser ? `<button onclick="openSubGameModalForPlayer(${sub.id}, ${g.id})" class="text-cyan-600 hover:text-cyan-800 ml-1" title="Éditer la partie"><i class="fa-solid fa-pen"></i></button>` : '';
@@ -2300,6 +2480,9 @@
                     method: (type === 'REGULIER' && isAdmin) ? method : 'Non spécifié',
                     subGames: []
                 };
+                if (type === 'REMPLACANT') {
+                    ensureSubUnpaidGameForToday(newPlayer);
+                }
                 players.push(newPlayer);
                 selectedPresenceIds.add(newPlayer.id);
             }
@@ -2389,11 +2572,11 @@
             document.getElementById('sub-game-amount').disabled = false;
             document.getElementById('sub-game-free').checked = false;
             document.getElementById('sub-game-date').value = new Date().toISOString().split('T')[0];
-            document.getElementById('sub-game-status').value = 'PAYE';
+            document.getElementById('sub-game-status').value = 'NON_PAYE';
             document.getElementById('sub-game-method').value = 'Interac / Virement';
             document.getElementById('sub-game-pay-date').value = new Date().toISOString().split('T')[0];
 
-            toggleSubGameStatusFields('PAYE');
+            toggleSubGameStatusFields('NON_PAYE');
             document.getElementById('sub-game-modal').classList.remove('hidden');
         }
 
@@ -2543,9 +2726,16 @@
             selectedPresenceIds.delete(selectedSwapPlayer.id);
             selectedPresenceIds.add(replacementPlayer.id);
 
+            // Si le joueur entrant est un remplaçant, l'ajouter automatiquement comme NON_PAYE pour aujourd'hui
+            if (replacementPlayer.type === 'REMPLACANT') {
+                ensureSubUnpaidGameForToday(replacementPlayer);
+            }
+
             saveStorage();
             renderTeams();
             renderPresenceSelector();
+            renderSubFinanceTable();
+            updateFinanceStats();
             closeSwapPlayerModal();
         }
 
@@ -2587,6 +2777,7 @@
         window.deleteUserEmail = deleteUserEmail;
         window.toggleHideRatings = toggleHideRatings;
         window.takeTeamsSnapshot = takeTeamsSnapshot;
+        window.takePredictionSnapshot = takePredictionSnapshot;
         window.toggleSubGameFree = toggleSubGameFree;
         window.publishLineup = publishLineup;
         window.deleteHistoricalLineup = deleteHistoricalLineup;
