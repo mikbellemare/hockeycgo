@@ -1850,9 +1850,9 @@
             const avgMulti = calcAvgCote(multiList);
             const diff = avgBlanc - avgMulti;
             
-            // Calcul du score final réaliste
-            let goalsBlanc = Math.max(2, Math.round(5 + diff * 1.5 + (Math.random() * 2.5 - 1.2)));
-            let goalsMulti = Math.max(2, Math.round(5 - diff * 1.5 + (Math.random() * 2.5 - 1.2)));
+            // Calcul du score final réaliste (ex: entre 3 et 8 buts)
+            let goalsBlanc = Math.max(2, Math.round(5 + diff * 1.2 + (Math.random() * 2 - 1)));
+            let goalsMulti = Math.max(2, Math.round(5 - diff * 1.2 + (Math.random() * 2 - 1)));
 
             if (goalsBlanc === goalsMulti) {
                 if (Math.random() < 0.5) goalsBlanc += 1;
@@ -1862,26 +1862,7 @@
             const winnerTeam = goalsBlanc > goalsMulti ? 'BLANC' : 'MULTICOLORE';
             const goalDiff = goalsBlanc - goalsMulti;
 
-            // Sélection pondérée d'un joueur dans une liste
-            const pickWeightedPlayer = (candidates, excludeId = null) => {
-                const pool = excludeId ? candidates.filter(p => p.id !== excludeId) : candidates;
-                if (pool.length === 0) return null;
-
-                const weights = pool.map(p => {
-                    const posMult = p.position === 'Attaquant' ? 1.5 : (p.position === 'Défenseur' ? 0.8 : 0.1);
-                    return Math.pow(p.cote || 7, 2) * posMult;
-                });
-
-                const totalWeight = weights.reduce((a, b) => a + b, 0);
-                let rnd = Math.random() * totalWeight;
-                for (let i = 0; i < pool.length; i++) {
-                    rnd -= weights[i];
-                    if (rnd <= 0) return pool[i];
-                }
-                return pool[pool.length - 1];
-            };
-
-            // Simulation cohérente : la somme des buts individuels = totalGoals de l'équipe
+            // Simulation cohérente : EXACTEMENT goalsFor buts distribués aux joueurs de l'équipe
             const simulateTeamStats = (teamList, goalsFor, goalsAgainst, isWinner) => {
                 const skaters = teamList.filter(p => p.position !== 'Gardien');
                 const goalies = teamList.filter(p => p.position === 'Gardien');
@@ -1899,76 +1880,91 @@
                     };
                 });
 
-                // 1. Distribution exacte des buts (goalsFor)
-                for (let g = 0; g < goalsFor; g++) {
-                    const scorer = pickWeightedPlayer(skaters);
-                    if (scorer) {
-                        statsMap[scorer.id].goals += 1;
-                        statsMap[scorer.id].points += 1;
+                if (skaters.length > 0) {
+                    // Distribution exacte de chaque but de l'équipe
+                    for (let g = 0; g < goalsFor; g++) {
+                        // Choisir un buteur pondéré par sa cote et sa position (attaquants favorisés)
+                        const scorer = pickWeightedPlayer(skaters);
+                        if (scorer) {
+                            statsMap[scorer.id].goals += 1;
+                            statsMap[scorer.id].points += 1;
 
-                        // 0 à 2 passes par but (75% chance d'une 1ère passe, 45% chance d'une 2ème passe)
-                        const hasFirstAssist = skaters.length > 1 && Math.random() < 0.75;
-                        let firstAssister = null;
-                        if (hasFirstAssist) {
-                            firstAssister = pickWeightedPlayer(skaters, scorer.id);
-                            if (firstAssister) {
-                                statsMap[firstAssister.id].assists += 1;
-                                statsMap[firstAssister.id].points += 1;
-                            }
-                        }
+                            // 1ère passe (70% de chance si au moins 2 joueurs)
+                            if (skaters.length > 1 && Math.random() < 0.70) {
+                                const assister1 = pickWeightedPlayer(skaters, scorer.id);
+                                if (assister1) {
+                                    statsMap[assister1.id].assists += 1;
+                                    statsMap[assister1.id].points += 1;
 
-                        const hasSecondAssist = skaters.length > 2 && firstAssister && Math.random() < 0.45;
-                        if (hasSecondAssist) {
-                            const remainingPool = skaters.filter(p => p.id !== scorer.id && p.id !== firstAssister.id);
-                            const secondAssister = pickWeightedPlayer(remainingPool);
-                            if (secondAssister) {
-                                statsMap[secondAssister.id].assists += 1;
-                                statsMap[secondAssister.id].points += 1;
+                                    // 2ème passe (40% de chance si au moins 3 joueurs)
+                                    if (skaters.length > 2 && Math.random() < 0.40) {
+                                        const assister2 = pickWeightedPlayer(skaters.filter(p => p.id !== scorer.id && p.id !== assister1.id));
+                                        if (assister2) {
+                                            statsMap[assister2.id].assists += 1;
+                                            statsMap[assister2.id].points += 1;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                // 2. Tirs au but (toujours >= buts marqués par le joueur) & Différentiel +/-
+                // Tirs au but individuels (toujours >= buts marqués + tirs non cadrés)
                 let totalTeamShots = 0;
                 const teamGoalDiff = isWinner ? Math.abs(goalDiff) : -Math.abs(goalDiff);
 
                 skaters.forEach(p => {
                     const st = statsMap[p.id];
                     const skillFactor = (p.cote || 7) / 7.5;
-                    const extraShots = Math.floor(Math.random() * 4 * skillFactor) + (p.position === 'Attaquant' ? 1 : 0);
+                    const extraShots = Math.floor(Math.random() * 3 * skillFactor) + (p.position === 'Attaquant' ? 2 : 1);
                     st.shots = st.goals + extraShots;
                     totalTeamShots += st.shots;
 
-                    // Différentiel cohérent avec l'écart du match et les points du joueur
-                    const variance = Math.floor(Math.random() * 3) - 1; // -1, 0 ou +1
-                    st.plusMinus = Math.round(teamGoalDiff * 0.5 + (st.points * 0.6) + variance);
+                    const variance = Math.floor(Math.random() * 3) - 1;
+                    st.plusMinus = Math.round(teamGoalDiff * 0.4 + (st.points * 0.5) + variance);
                 });
 
-                // Si aucun patineur n'était présent, garantir un minimum de tirs
-                if (totalTeamShots < goalsFor) {
-                    totalTeamShots = goalsFor + 15;
+                if (totalTeamShots < goalsFor + 10) {
+                    totalTeamShots = goalsFor + 14;
                 }
 
                 return { statsMap, totalTeamShots, goalies };
             };
 
+            const pickWeightedPlayer = (candidates, excludeId = null) => {
+                const pool = excludeId ? candidates.filter(p => p.id !== excludeId) : candidates;
+                if (pool.length === 0) return null;
+
+                const weights = pool.map(p => {
+                    const posMult = p.position === 'Attaquant' ? 1.5 : (p.position === 'Défenseur' ? 0.9 : 0.1);
+                    return Math.pow(p.cote || 7, 2) * posMult;
+                });
+
+                const totalWeight = weights.reduce((a, b) => a + b, 0);
+                let rnd = Math.random() * totalWeight;
+                for (let i = 0; i < pool.length; i++) {
+                    rnd -= weights[i];
+                    if (rnd <= 0) return pool[i];
+                }
+                return pool[pool.length - 1];
+            };
+
             const blancSim = simulateTeamStats(blancList, goalsBlanc, goalsMulti, winnerTeam === 'BLANC');
             const multiSim = simulateTeamStats(multiList, goalsMulti, goalsBlanc, winnerTeam === 'MULTICOLORE');
 
-            // 3. Calcul cohérent du % d'arrêt des gardiens basé sur les tirs adverses et buts accordés
+            // Calcul % d'arrêt des gardiens
             const assignGoalieStats = (simData, shotsAgainst, goalsAgainst) => {
                 const { goalies, statsMap } = simData;
                 if (goalies.length === 0) return;
 
-                const validShots = Math.max(goalsAgainst + 8, shotsAgainst);
+                const validShots = Math.max(goalsAgainst + 6, shotsAgainst);
                 const saves = validShots - goalsAgainst;
                 const basePct = (saves / validShots) * 100;
 
                 goalies.forEach((g, idx) => {
-                    // Légère variation s'il y a 2 gardiens dans la même équipe
-                    const adj = goalies.length > 1 ? (idx === 0 ? 0.6 : -0.6) : 0;
-                    const finalPct = Math.min(98.5, Math.max(72.0, basePct + adj));
+                    const adj = goalies.length > 1 ? (idx === 0 ? 0.5 : -0.5) : 0;
+                    const finalPct = Math.min(98.0, Math.max(75.0, basePct + adj));
                     statsMap[g.id].savePct = finalPct.toFixed(1) + '%';
                     statsMap[g.id].numericSavePct = finalPct;
                 });
@@ -1977,14 +1973,13 @@
             assignGoalieStats(blancSim, multiSim.totalTeamShots, goalsMulti);
             assignGoalieStats(multiSim, blancSim.totalTeamShots, goalsBlanc);
 
-            // 4. Sélection de l'Étoile du Match cohérente avec les stats générées
+            // Étoile du match
             const winnerSim = winnerTeam === 'BLANC' ? blancSim : multiSim;
             const winnerStatsList = Object.values(winnerSim.statsMap);
 
-            // Trier les joueurs de l'équipe gagnante par impact (Points > Buts > % Arrêt élevé)
             winnerStatsList.sort((a, b) => {
-                if (a.player.position === 'Gardien' && (a.numericSavePct || 0) >= 91.5) return -1;
-                if (b.player.position === 'Gardien' && (b.numericSavePct || 0) >= 91.5) return 1;
+                if (a.player.position === 'Gardien' && (a.numericSavePct || 0) >= 91.0) return -1;
+                if (b.player.position === 'Gardien' && (b.numericSavePct || 0) >= 91.0) return 1;
                 if (b.points !== a.points) return b.points - a.points;
                 return b.goals - a.goals;
             });
@@ -1994,27 +1989,26 @@
 
             let starReason = '';
             if (starPlayer.position === 'Gardien') {
-                starReason = `Un mur infranchissable devant son filet avec un taux d'efficacité de ${starEntry.savePct}, frustrant les attaquants adverses en 3e période !`;
+                starReason = `Performance magistrale devant son filet avec un taux d'arrêt de ${starEntry.savePct}, scellant la victoire pour son équipe !`;
             } else if (starEntry.goals >= 3) {
-                starReason = `Tour du chapeau spectaculaire (${starEntry.goals} buts, ${starEntry.assists} passe${starEntry.assists > 1 ? 's' : ''}) ! Il a complètement dominé l'attaque ce soir.`;
+                starReason = `Tour du chapeau décisif (${starEntry.goals} buts, ${starEntry.assists} passe) ! Il a porté l'attaque toute la soirée.`;
             } else if (starEntry.points >= 2) {
-                starReason = `Performance offensive clé avec ${starEntry.goals} but${starEntry.goals > 1 ? 's' : ''} et ${starEntry.assists} passe${starEntry.assists > 1 ? 's' : ''} (${starEntry.points} pts), menant son équipe à la victoire !`;
+                starReason = `Productif avec ${starEntry.goals} but${starEntry.goals > 1 ? 's' : ''} et ${starEntry.assists} passe${starEntry.assists > 1 ? 's' : ''} (${starEntry.points} pts), il a été le moteur offensif de son équipe.`;
             } else {
-                starReason = `Présence dominante sur la patinoire et jeu décisif dans les moments chauds de la rencontre !`;
+                starReason = `Impact constant sur l'ensemble de la patinoire et jeu opportuniste dans les moments clés !`;
             }
 
             const totalCote = avgBlanc + avgMulti;
             const winProb = Math.round((winnerTeam === 'BLANC' ? avgBlanc : avgMulti) / totalCote * 100);
 
             const matchAnalyses = [
-                `Selon notre modèle de simulation, ce duel s'annonce extrêmement rythmé. L'Équipe ${winnerTeam} devrait prendre l'avantage grâce à sa synergie collective et une efficacité redoutable sur les revirements.`,
-                `Une confrontation serrée où la profondeur des bancs fera toute la différence. L'Équipe ${winnerTeam} profitera d'une meilleure présence physique et de tirs de qualité en fin de match pour l'emporter.`,
-                `Un match très offensif en perspective ! L'Équipe ${winnerTeam} saura imposer son rythme dès le premier tiers-temps pour conserver l'avantage jusqu'au coup de sifflet final.`
+                `Un match intense et très disputé. L'Équipe ${winnerTeam} saura faire preuve de réalisme offensif dans les moments clés pour s'imposer.`,
+                `Une opposition tactique serrée. Grâce à une solide structure défensive et un opportunisme en fin de rencontre, l'Équipe ${winnerTeam} tirera son épingle du jeu.`,
+                `Du spectacle au rendez-vous ! L'Équipe ${winnerTeam} profitera d'un meilleur contrôle du jeu pour l'emporter au terme d'un match enlevant.`
             ];
             const matchSummaryText = matchAnalyses[Math.floor(Math.random() * matchAnalyses.length)];
 
             const buildTeamStatsHTML = (teamList, statsMap) => {
-                // Trier l'affichage : Gardiens en haut, puis par points décroissants
                 const sortedList = [...teamList].sort((a, b) => {
                     if (a.position === 'Gardien' && b.position !== 'Gardien') return -1;
                     if (a.position !== 'Gardien' && b.position === 'Gardien') return 1;
@@ -2125,21 +2119,31 @@
                 </div>
             `;
 
-            // Afficher le bouton Snapshot Facebook pour les prédictions
             const snapBtn = document.getElementById('btn-snapshot-prediction');
             if (snapBtn) snapBtn.classList.remove('hidden');
         }
 
         function copyLineupText() {
-            let text = `🏒 *ALIGNEMENT DE LA SEMAINE* 🏒\n\n`;
-            text += `⚪ *ÉQUIPE BLANC*\n`;
-            text += `G: ${currentLineup.blanc.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `DEF: ${currentLineup.blanc.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `ATT: ${currentLineup.blanc.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n\n`;
-            text += `🎨 *ÉQUIPE MULTICOLORE*\n`;
-            text += `G: ${currentLineup.multicolore.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `DEF: ${currentLineup.multicolore.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}\n`;
-            text += `ATT: ${currentLineup.multicolore.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}\n`;
+            let text = `🏒 *ALIGNEMENT DE LA SEMAINE* 🏒
+
+`;
+            text += `⚪ *ÉQUIPE BLANC*
+`;
+            text += `G: ${currentLineup.blanc.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}
+`;
+            text += `DEF: ${currentLineup.blanc.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}
+`;
+            text += `ATT: ${currentLineup.blanc.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}
+
+`;
+            text += `🎨 *ÉQUIPE MULTICOLORE*
+`;
+            text += `G: ${currentLineup.multicolore.filter(p=>p.position==='Gardien').map(p=>p.name).join(', ') || 'Aucun'}
+`;
+            text += `DEF: ${currentLineup.multicolore.filter(p=>p.position==='Défenseur').map(p=>p.name).join(', ') || 'Aucun'}
+`;
+            text += `ATT: ${currentLineup.multicolore.filter(p=>p.position==='Attaquant').map(p=>p.name).join(', ') || 'Aucun'}
+`;
 
             navigator.clipboard.writeText(text);
             alert("Alignement copié dans le presse-papier !");
